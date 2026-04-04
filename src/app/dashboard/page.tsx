@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Header } from '@/components/Header';
 import { ConfigPanel } from '@/components/ConfigPanel';
 import { CallPanelIdle } from '@/components/CallPanelIdle';
@@ -8,9 +8,26 @@ import { ActiveVoicePanel } from '@/components/ActiveVoicePanel';
 import { TranscriptionPanel } from '@/components/TranscriptionPanel';
 import { SupportPopup } from '@/components/SupportPopup';
 import { EndCallModal } from '@/components/EndCallModal';
+import { supabase } from '@/lib/supabase';
 
 export default function DashboardPage() {
   const [callState, setCallState] = useState<'idle' | 'active' | 'ended'>('idle');
+  
+  // Lifting State para compartilhar a Configuração selecionada com o gravador de voz
+  const [selectedPersonaId, setSelectedPersonaId] = useState('');
+  const [selectedDifficulty, setSelectedDifficulty] = useState('medio');
+  
+  // Guardamos a sessão do Usuário logado
+  const [userId, setUserId] = useState('');
+
+  useEffect(() => {
+    // Tenta pegar a sessão atual limpa do Auth
+    supabase.auth.getUser().then(({ data }) => {
+      if (data?.user) {
+        setUserId(data.user.id);
+      }
+    });
+  }, []);
 
   return (
     <div className="min-h-screen bg-background flex flex-col font-sans">
@@ -19,16 +36,22 @@ export default function DashboardPage() {
       <main className="flex-1 p-4 md:p-6 lg:p-8">
         <div className="max-w-[1600px] mx-auto grid grid-cols-1 lg:grid-cols-[400px_1fr] xl:grid-cols-[450px_1fr] h-full lg:h-[calc(100vh-120px)] gap-6">
           
-          {/* Lado Esquerdo condicional: Painel de Configurações ou Painel Ativo de Voz */}
           <section className="h-full flex flex-col shrink-0">
             {callState === 'idle' ? (
-              <ConfigPanel />
+              <ConfigPanel 
+                onPersonaSelect={setSelectedPersonaId}
+                onDifficultySelect={setSelectedDifficulty}
+              />
             ) : (
-              <ActiveVoicePanel onEnd={() => setCallState('ended')} />
+              <ActiveVoicePanel 
+                onEnd={() => setCallState('ended')} 
+                personaId={selectedPersonaId}
+                difficulty={selectedDifficulty}
+                userId={userId}
+              />
             )}
           </section>
 
-          {/* Lado Direito condicional: Transcrição ao vivo ou Call to action */}
           <section className="h-full flex flex-col min-h-[600px]">
             {callState === 'idle' ? (
               <CallPanelIdle onStart={() => setCallState('active')} />

@@ -1,25 +1,62 @@
 'use client';
 
-import { useState } from 'react';
-import { Briefcase, Building, Users, UserX, Crown, Settings } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Briefcase, Building, Users, UserX, Crown, Settings, LucideIcon } from 'lucide-react';
+import { supabase } from '@/lib/supabase';
 
-const SCENARIOS = [
-  { id: 'director', label: 'Diretor Estressado', icon: UserX },
-  { id: 'hr', label: 'RH Técnico', icon: Users },
-  { id: 'ceo', label: 'CEO Sem Tempo', icon: Crown },
-  { id: 'buyer', label: 'Comprador Frio', icon: Building },
-  { id: 'manager', label: 'Gerente Amigável', icon: Briefcase },
-];
+// Map de ícones string-to-component
+const ICON_MAP: Record<string, LucideIcon> = {
+  UserX,
+  Users,
+  Crown,
+  Building,
+  Briefcase
+};
 
 const DIFFICULTIES = [
-  { id: 'easy', label: 'Fácil', description: 'Receptivo e com tempo' },
-  { id: 'medium', label: 'Médio', description: 'Neutro, vai fazer perguntas' },
-  { id: 'hard', label: 'Difícil', description: 'Apressado e resistente' },
+  { id: 'facil', label: 'Fácil', description: 'Receptivo e com tempo' },
+  { id: 'medio', label: 'Médio', description: 'Neutro, vai fazer perguntas' },
+  { id: 'dificil', label: 'Difícil', description: 'Apressado e resistente' },
 ];
 
-export function ConfigPanel() {
-  const [selectedScenario, setSelectedScenario] = useState('director');
-  const [selectedDifficulty, setSelectedDifficulty] = useState('medium');
+interface ConfigPanelProps {
+  onPersonaSelect: (id: string) => void;
+  onDifficultySelect: (diff: string) => void;
+}
+
+export function ConfigPanel({ onPersonaSelect, onDifficultySelect }: ConfigPanelProps) {
+  const [personas, setPersonas] = useState<any[]>([]);
+  const [selectedScenario, setSelectedScenario] = useState('');
+  const [selectedDifficulty, setSelectedDifficulty] = useState('medio');
+  const [loading, setLoading] = useState(true);
+
+  // Fetch das personas via Supabase Client no Mount
+  useEffect(() => {
+    async function fetchPersonas() {
+      const { data, error } = await supabase.from('personas').select('*');
+      if (error) {
+        console.error('Erro ao buscar personas:', error);
+      } else if (data && data.length > 0) {
+        setPersonas(data);
+        const defaultId = data[0].id;
+        setSelectedScenario(defaultId);
+        onPersonaSelect(defaultId);
+        onDifficultySelect('medio');
+      }
+      setLoading(false);
+    }
+    fetchPersonas();
+  }, [onPersonaSelect, onDifficultySelect]);
+
+  const handlePersonaClick = (id: string) => {
+    setSelectedScenario(id);
+    onPersonaSelect(id);
+  };
+
+  const handleDifficultyClick = (id: string) => {
+    setSelectedDifficulty(id);
+    onDifficultySelect(id);
+  };
 
   return (
     <div className="p-6 bg-panel rounded-2xl border border-border flex flex-col gap-8 h-full">
@@ -35,28 +72,37 @@ export function ConfigPanel() {
       </div>
 
       {/* Scenario Selection */}
-      <div className="flex flex-col gap-4">
+      <div className="flex flex-col gap-4 relative min-h-[150px]">
         <h3 className="text-sm font-medium text-foreground/60 uppercase tracking-wider">Perfil do Cliente</h3>
-        <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-          {SCENARIOS.map((scenario) => {
-            const Icon = scenario.icon;
-            const isActive = selectedScenario === scenario.id;
-            return (
-              <button
-                key={scenario.id}
-                onClick={() => setSelectedScenario(scenario.id)}
-                className={`flex flex-col items-center justify-center p-4 rounded-xl border transition-all ${
-                  isActive 
-                    ? 'border-primary bg-primary/5 text-primary' 
-                    : 'border-border bg-background hover:border-foreground/30 text-foreground/70'
-                }`}
-              >
-                <Icon className={`w-6 h-6 mb-2 ${isActive ? 'text-primary' : 'text-foreground/50'}`} />
-                <span className="text-xs font-medium text-center">{scenario.label}</span>
-              </button>
-            );
-          })}
-        </div>
+        
+        {loading ? (
+          <div className="absolute inset-0 flex items-center justify-center pt-8">
+             <div className="w-8 h-8 border-4 border-accent/20 border-t-accent rounded-full animate-spin" />
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+            {personas.map((persona) => {
+              const Icon = ICON_MAP[persona.icon_name] || UserX; // Fallback Icon
+              const isActive = selectedScenario === persona.id;
+              
+              return (
+                <button
+                  key={persona.id}
+                  onClick={() => handlePersonaClick(persona.id)}
+                  className={`flex flex-col items-center justify-center p-4 rounded-xl border transition-all ${
+                    isActive 
+                      ? 'border-primary bg-primary/5 text-primary shadow-inner shadow-primary/10' 
+                      : 'border-border bg-background hover:border-foreground/30 text-foreground/70'
+                  }`}
+                >
+                  {isActive && persona.is_pro && <Crown className="absolute w-3 h-3 text-yellow-400 top-2 right-2"/>}
+                  <Icon className={`w-6 h-6 mb-2 ${isActive ? 'text-primary' : 'text-foreground/50'}`} />
+                  <span className="text-xs font-medium text-center">{persona.name}</span>
+                </button>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       {/* Difficulty Selection */}
@@ -68,10 +114,10 @@ export function ConfigPanel() {
             return (
               <button
                 key={diff.id}
-                onClick={() => setSelectedDifficulty(diff.id)}
+                onClick={() => handleDifficultyClick(diff.id)}
                 className={`flex flex-col items-center justify-center p-3 rounded-xl border transition-all ${
                   isActive 
-                    ? 'border-accent bg-accent/5 text-accent' 
+                    ? 'border-accent bg-accent/5 text-accent shadow-inner shadow-accent/10' 
                     : 'border-border bg-background hover:border-foreground/30 text-foreground/70'
                 }`}
               >

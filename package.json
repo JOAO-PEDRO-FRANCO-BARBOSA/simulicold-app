@@ -9,6 +9,7 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@ai-sdk/google": "^3.0.58",
     "@ai-sdk/openai": "^3.0.48",
     "@supabase/supabase-js": "^2.100.1",
     "ai": "^6.0.141",

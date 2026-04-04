@@ -26,3 +26,24 @@ body {
   background-color: var(--background);
   color: var(--foreground);
 }
+
+.slider-thumb-blue::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: black;
+  border: 3px solid #3b82f6;
+  cursor: pointer;
+  transition: transform 0.1s;
+}
+
+.slider-thumb-blue::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: black;
+  border: 3px solid #3b82f6;
+  cursor: pointer;
+}

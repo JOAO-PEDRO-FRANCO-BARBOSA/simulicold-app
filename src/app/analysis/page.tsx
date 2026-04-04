@@ -1,16 +1,183 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
-import { AlertTriangle, Volume2, Play, RotateCcw, Target, TrendingUp, MessageSquare, Sparkles, ChevronUp, ThumbsUp, ThumbsDown, Lightbulb, ChevronLeft } from 'lucide-react';
+import { supabase } from '@/lib/supabase';
+import { AlertTriangle, Volume2, Play, Pause, RotateCcw, Target, TrendingUp, MessageSquare, Sparkles, ChevronUp, ThumbsUp, ThumbsDown, Lightbulb, ChevronLeft, Download, Loader2 } from 'lucide-react';
+
+function CustomAudioPlayer({ audioUrl, userId }: { audioUrl: string; userId: string }) {
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [progress, setProgress] = useState(0);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [duration, setDuration] = useState(0);
+
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+
+  const togglePlay = () => {
+    if (!audioRef.current) return;
+    if (isPlaying) {
+      audioRef.current.pause();
+    } else {
+      audioRef.current.play();
+    }
+    setIsPlaying(!isPlaying);
+  };
+
+  const handleTimeUpdate = () => {
+    if (!audioRef.current) return;
+    const curr = audioRef.current.currentTime;
+    setCurrentTime(curr);
+    if (isFinite(duration) && duration > 0) {
+      setProgress((curr / duration) * 100);
+    }
+  };
+
+  const handleLoadedMetadata = () => {
+    if (!audioRef.current) return;
+    
+    const audio = audioRef.current;
+    
+    // O WebM gerado por MediaRecorder frequentemente não tem a métrica de duração no Header. 
+    // O Chromium lê como Infinity. A solução genial é forçar o pulo pro fim!
+    if (audio.duration === Infinity || isNaN(audio.duration)) {
+      audio.currentTime = 1e6; // Hack: vai lá pra frente
+      const retrieveDuration = () => {
+        setDuration(audio.duration);
+        audio.currentTime = 0; // Volta
+        audio.removeEventListener('seeked', retrieveDuration);
+      };
+      audio.addEventListener('seeked', retrieveDuration);
+    } else {
+      setDuration(audio.duration);
+    }
+  };
+
+  const handleSeek = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!audioRef.current || !isFinite(duration)) return;
+    const value = parseFloat(e.target.value);
+    const newTime = (value / 100) * duration;
+    audioRef.current.currentTime = newTime;
+    setProgress(value);
+  };
+
+  const formatTime = (time: number) => {
+    // Corrige os textos "Infinity" ou "NaN" mostrando zerado visualmente até carregar
+    if (!time || !isFinite(time) || isNaN(time)) return '0:00';
+    const m = Math.floor(time / 60);
+    const s = Math.floor(time % 60);
+    return `${m}:${s.toString().padStart(2, '0')}`;
+  };
+
+  return (
+    <div className="w-full flex flex-col gap-3 mt-4">
+      {/* Title Header */}
+      <div className="flex items-center gap-2 text-primary ml-1">
+        <Volume2 className="w-5 h-5 fill-primary stroke-none" />
+        <h3 className="font-serif font-bold text-lg tracking-wide text-foreground">Ouvir gravação</h3>
+      </div>
+
+      {/* Main Player Box Minimalista */}
+      <div className="bg-[#151515] rounded-[1.5rem] py-5 flex flex-col sm:flex-row items-center gap-4 sm:gap-6 w-full relative px-4">
+        {/* Hidden Audio */}
+        <audio 
+          ref={audioRef} 
+          src={audioUrl} 
+          onTimeUpdate={handleTimeUpdate}
+          onLoadedMetadata={handleLoadedMetadata}
+          onEnded={() => setIsPlaying(false)}
+          className="hidden" 
+          preload="metadata"
+        />
+
+        {/* Play/Pause icon (sem bolha preenchida) */}
+        <button 
+          onClick={togglePlay}
+          className="w-10 h-10 sm:w-12 sm:h-12 flex items-center justify-center shrink-0 cursor-pointer text-foreground/80 hover:text-white transition-colors hover:scale-105 active:scale-95"
+          title={isPlaying ? "Pausar" : "Tocar"}
+        >
+          {isPlaying ? <Pause className="w-6 h-6 fill-current" /> : <Play className="w-6 h-6 fill-current ml-1" />}
+        </button>
+
+        {/* Timeline Component Estilo YouTube c/ Time Lado a Lado */}
+        <div className="flex-1 flex items-center gap-3 w-full">
+           <span className="text-[11px] sm:text-xs font-mono text-primary/70 opacity-90 w-8 text-right">
+             {formatTime(currentTime)}
+           </span>
+           
+           <input 
+             type="range" 
+             min="0" 
+             max="100" 
+             step="0.1"
+             value={progress || 0} 
+             onChange={handleSeek}
+             style={{ background: `linear-gradient(to right, var(--primary) ${progress}%, #3f3f46 ${progress}%)` }}
+             className="flex-1 h-1.5 rounded-full appearance-none cursor-pointer slider-thumb-blue focus:outline-none z-10 bg-[#3f3f46]"
+           />
+           
+           <span className="text-[11px] sm:text-xs font-mono text-primary/70 opacity-90 w-8">
+             {formatTime(duration)}
+           </span>
+        </div>
+
+        {/* Action icons (Icones finais vazados) */}
+        <div className="flex items-center justify-center gap-5 shrink-0 sm:ml-2 text-foreground/50 w-full sm:w-auto mt-2 sm:mt-0">
+           <button 
+              onClick={() => { if(audioRef.current) audioRef.current.currentTime = 0; }} 
+              className="hover:text-foreground transition-colors cursor-pointer hover:rotate-[-45deg] duration-300"
+              title="Reiniciar"
+           >
+              <RotateCcw className="w-[20px] h-[20px] sm:w-[22px] sm:h-[22px]" />
+           </button>
+           
+           <a 
+              href={audioUrl} 
+              download={`simulacao_user_${userId.substring(0, 6)}.webm`} 
+              target="_blank" 
+              rel="noopener noreferrer"
+              className="hover:text-primary transition-colors cursor-pointer"
+              title="Baixar Gravação"
+           >
+              <Download className="w-[20px] h-[20px] sm:w-[22px] sm:h-[22px]" />
+           </a>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export default function AnalysisPage() {
-  // Controle de estado para saber quais "Turnos" (falas) estão abertos/fechados.
-  // Pelo seu design, o turno 7 fica aberto de cara e o 8 fechado.
   const [expandedTurns, setExpandedTurns] = useState<Record<number, boolean>>({
     7: true,
     8: false
   });
+
+  const [audioUrl, setAudioUrl] = useState<string | null>(null);
+  const [activeUserId, setActiveUserId] = useState<string | null>(null);
+  const [isLoadingAudio, setIsLoadingAudio] = useState(true);
+
+  useEffect(() => {
+    async function loadSimulationData() {
+      const { data: authData } = await supabase.auth.getUser();
+      if (authData?.user) {
+        setActiveUserId(authData.user.id);
+
+        const { data, error } = await supabase
+          .from('simulations')
+          .select('audio_recording_url')
+          .eq('user_id', authData.user.id)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .single();
+
+        if (data?.audio_recording_url) {
+          setAudioUrl(data.audio_recording_url);
+        }
+      }
+      setIsLoadingAudio(false);
+    }
+    loadSimulationData();
+  }, []);
 
   const toggleTurn = (turnId: number) => {
     setExpandedTurns(prev => ({ ...prev, [turnId]: !prev[turnId] }));
@@ -20,13 +187,13 @@ export default function AnalysisPage() {
     <div className="min-h-screen bg-background font-sans text-foreground pb-20 fade-in animate-in duration-500">
       {/* Header Minimalista (Voltar) */}
       <header className="p-4 px-6 border-b border-border/50 bg-panel flex items-center shadow-sm">
-        <Link href="/" className="flex items-center gap-2 text-foreground/50 hover:text-foreground transition-colors cursor-pointer group">
+        <Link href="/dashboard" className="flex items-center gap-2 text-foreground/50 hover:text-foreground transition-colors cursor-pointer group">
           <ChevronLeft className="w-5 h-5 group-hover:-translate-x-1 transition-transform" />
           <span className="font-semibold text-sm">Voltar para o Simulador B2B</span>
         </Link>
       </header>
 
-      <main className="max-w-3xl mx-auto p-4 md:p-8 flex flex-col gap-6 mt-4">
+      <main className="max-w-4xl mx-auto p-4 md:p-8 flex flex-col gap-6 mt-4">
         
         {/* Banner de Resultado */}
         <div className="bg-[#2a1111] border border-red-900/50 rounded-3xl p-5 flex items-start gap-4 shadow-lg shadow-red-900/10">
@@ -39,38 +206,23 @@ export default function AnalysisPage() {
           </div>
         </div>
 
-        {/* Reprodutor de Áudio */}
-        <div className="bg-panel border border-border rounded-3xl p-8">
-          <div className="flex items-center gap-2 mb-6">
-            <Volume2 className="w-5 h-5 text-accent" />
-            <h3 className="font-bold font-serif text-lg tracking-wide">Ouvir Gravação</h3>
-          </div>
-          
-          <div className="bg-background border border-border rounded-2xl py-4 px-6 flex items-center justify-between gap-5 shadow-inner">
-            <button className="text-foreground/80 hover:text-accent transition-colors cursor-pointer">
-              <Play className="w-6 h-6 fill-current" />
-            </button>
-            <span className="text-xs font-mono text-foreground/50 w-10 text-right">0:00</span>
-            
-            {/* Barra de Progresso Dourada Mock */}
-            <div className="flex-1 h-[6px] bg-border rounded-full relative cursor-pointer">
-              <div className="absolute left-0 top-0 bottom-0 w-[45%] bg-accent rounded-full">
-                <div className="absolute right-0 top-1/2 -translate-y-1/2 w-4 h-4 bg-accent rounded-full shadow-[0_0_12px_rgba(234,179,8,0.6)] border-[3px] border-background" />
-              </div>
-            </div>
-            
-            <span className="text-xs font-mono text-foreground/50 w-10">1:38</span>
-            <button className="text-foreground/50 hover:text-foreground ml-2 cursor-pointer transition-colors hover:-rotate-45 duration-300">
-              <RotateCcw className="w-5 h-5" />
-            </button>
-            <button className="text-foreground/50 hover:text-foreground cursor-pointer transition-colors hidden sm:block">
-              <Volume2 className="w-5 h-5" />
-            </button>
-          </div>
-        </div>
+        {/* ======================= MÓDULO DE ÁUDIO ===================== */}
+        {isLoadingAudio ? (
+           <div className="bg-[#121212] rounded-[1.5rem] p-6 flex items-center justify-center gap-3 w-full mt-4 animate-pulse h-[100px]">
+              <Loader2 className="w-6 h-6 text-primary animate-spin" />
+              <p className="text-foreground/70 font-bold uppercase tracking-widest text-xs">Carregando Gravação...</p>
+           </div>
+        ) : audioUrl && activeUserId ? (
+           <CustomAudioPlayer audioUrl={audioUrl} userId={activeUserId} />
+        ) : (
+           <div className="bg-[#121212] rounded-[1.5rem] p-6 flex flex-col items-center justify-center gap-2 w-full mt-4 h-[100px] opacity-70">
+              <Volume2 className="w-6 h-6 text-foreground/20" />
+              <p className="text-foreground/40 font-semibold italic text-sm">Áudio indisponível</p>
+           </div>
+        )}
 
         {/* Status Cards */}
-        <div className="grid grid-cols-3 gap-4">
+        <div className="grid grid-cols-3 gap-4 mt-2">
           <div className="bg-panel border border-border rounded-3xl p-5 flex flex-col justify-center items-center sm:items-start transition-colors hover:border-foreground/20">
             <div className="flex items-center gap-2 text-foreground/60 mb-2">
               <Target className="w-4 h-4 text-accent" />
