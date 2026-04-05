@@ -1,11 +1,39 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { History, Settings, PhoneForwarded, User, LogOut } from 'lucide-react';
+import { supabase } from '@/lib/supabase';
 
 export function Header() {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    async function loadAvatar() {
+      const { data: authData } = await supabase.auth.getUser();
+      if (authData?.user) {
+        const { data: profileRow } = await supabase
+          .from('profiles')
+          .select('avatar_url')
+          .eq('id', authData.user.id)
+          .single();
+        if (profileRow?.avatar_url) {
+          setAvatarUrl(profileRow.avatar_url);
+        }
+      }
+    }
+    loadAvatar();
+
+    const handleProfileUpdate = (e: any) => {
+      if (e.detail?.avatar_url) {
+        setAvatarUrl(e.detail.avatar_url);
+      }
+    };
+
+    window.addEventListener('profileUpdated', handleProfileUpdate);
+    return () => window.removeEventListener('profileUpdated', handleProfileUpdate);
+  }, []);
 
   return (
     <header className="flex items-center justify-between p-4 px-6 border-b border-border/50 bg-background relative z-50">
@@ -26,9 +54,13 @@ export function Header() {
         <div className="relative">
           <button 
             onClick={() => setIsMenuOpen(!isMenuOpen)}
-            className="hover:text-foreground transition-colors p-1 cursor-pointer"
+            className="hover:text-foreground transition-colors p-1 cursor-pointer rounded-full border border-transparent hover:border-border"
           >
-            <Settings className="w-5 h-5" />
+            {avatarUrl ? (
+              <img src={avatarUrl} alt="Avatar" className="w-6 h-6 rounded-full object-cover" />
+            ) : (
+              <User className="w-5 h-5 text-foreground/80" />
+            )}
           </button>
 
           {isMenuOpen && (

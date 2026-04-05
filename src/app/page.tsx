@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Mail, Lock, ArrowRight, UserPlus, LogIn, AlertCircle, CheckCircle, RefreshCw } from 'lucide-react';
+import { Mail, Lock, ArrowRight, UserPlus, LogIn, AlertCircle, CheckCircle, RefreshCw, Eye, EyeOff, Loader2 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 
 export default function AuthPage() {
@@ -13,6 +13,8 @@ export default function AuthPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
   const [loading, setLoading] = useState(false);
   const [registrationSuccess, setRegistrationSuccess] = useState(false);
@@ -184,13 +186,20 @@ export default function AuthPage() {
                       <div className="relative">
                         <Lock className="w-5 h-5 absolute left-4 top-1/2 -translate-y-1/2 text-foreground/40" />
                         <input 
-                          type="password" 
+                          type={showPassword ? 'text' : 'password'} 
                           placeholder="••••••••"
                           value={password}
                           onChange={(e) => setPassword(e.target.value)}
-                          className="w-full bg-background border border-border/60 text-foreground text-sm rounded-xl py-3.5 pl-12 pr-4 focus:outline-none focus:border-accent/50 focus:ring-1 focus:ring-accent/50 transition-all placeholder:text-foreground/30"
+                          className="w-full bg-background border border-border/60 text-foreground text-sm rounded-xl py-3.5 pl-12 pr-12 focus:outline-none focus:border-accent/50 focus:ring-1 focus:ring-accent/50 transition-all placeholder:text-foreground/30"
                           required
                         />
+                        <button 
+                          type="button" 
+                          onClick={() => setShowPassword(!showPassword)}
+                          className="absolute right-4 top-1/2 -translate-y-1/2 text-foreground/40 hover:text-foreground transition-colors cursor-pointer"
+                        >
+                          {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                        </button>
                       </div>
                       <div className="flex justify-end mt-2">
                         <button type="button" className="text-xs text-accent/80 hover:text-accent font-semibold transition-colors cursor-pointer">
@@ -238,14 +247,21 @@ export default function AuthPage() {
                       <div className="relative">
                         <Lock className="w-5 h-5 absolute left-4 top-1/2 -translate-y-1/2 text-foreground/40" />
                         <input 
-                          type="password" 
+                          type={showPassword ? 'text' : 'password'} 
                           placeholder="Mínimo de 8 caracteres"
                           value={password}
                           onChange={(e) => setPassword(e.target.value)}
-                          className="w-full bg-background border border-border/60 text-foreground text-sm rounded-xl py-3.5 pl-12 pr-4 focus:outline-none focus:border-accent/50 focus:ring-1 focus:ring-accent/50 transition-all placeholder:text-foreground/30"
+                          className="w-full bg-background border border-border/60 text-foreground text-sm rounded-xl py-3.5 pl-12 pr-12 focus:outline-none focus:border-accent/50 focus:ring-1 focus:ring-accent/50 transition-all placeholder:text-foreground/30"
                           required
                           minLength={8}
                         />
+                        <button 
+                          type="button" 
+                          onClick={() => setShowPassword(!showPassword)}
+                          className="absolute right-4 top-1/2 -translate-y-1/2 text-foreground/40 hover:text-foreground transition-colors cursor-pointer"
+                        >
+                          {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                        </button>
                       </div>
                     </div>
 
@@ -254,13 +270,20 @@ export default function AuthPage() {
                       <div className="relative">
                         <Lock className="w-5 h-5 absolute left-4 top-1/2 -translate-y-1/2 text-foreground/40" />
                         <input 
-                          type="password" 
+                          type={showConfirmPassword ? 'text' : 'password'} 
                           placeholder="Repita sua senha"
                           value={confirmPassword}
                           onChange={(e) => setConfirmPassword(e.target.value)}
-                          className="w-full bg-background border border-border/60 text-foreground text-sm rounded-xl py-3.5 pl-12 pr-4 focus:outline-none focus:border-accent/50 focus:ring-1 focus:ring-accent/50 transition-all placeholder:text-foreground/30"
+                          className="w-full bg-background border border-border/60 text-foreground text-sm rounded-xl py-3.5 pl-12 pr-12 focus:outline-none focus:border-accent/50 focus:ring-1 focus:ring-accent/50 transition-all placeholder:text-foreground/30"
                           required
                         />
+                        <button 
+                          type="button" 
+                          onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                          className="absolute right-4 top-1/2 -translate-y-1/2 text-foreground/40 hover:text-foreground transition-colors cursor-pointer"
+                        >
+                          {showConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                        </button>
                       </div>
                     </div>
                   </div>

@@ -3,8 +3,9 @@
 import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
-import { AlertTriangle, Volume2, Play, Pause, RotateCcw, Target, TrendingUp, MessageSquare, Sparkles, ChevronUp, ThumbsUp, ThumbsDown, Lightbulb, ChevronLeft, Download, Loader2 } from 'lucide-react';
+import { AlertTriangle, Volume2, Play, Pause, RotateCcw, Target, TrendingUp, MessageSquare, Sparkles, ChevronLeft, Download, Loader2, User, Bot } from 'lucide-react';
 
+// ========================== AUDIO PLAYER ==========================
 function CustomAudioPlayer({ audioUrl, userId }: { audioUrl: string; userId: string }) {
   const [isPlaying, setIsPlaying] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -61,7 +62,6 @@ function CustomAudioPlayer({ audioUrl, userId }: { audioUrl: string; userId: str
   };
 
   const formatTime = (time: number) => {
-    // Corrige os textos "Infinity" ou "NaN" mostrando zerado visualmente até carregar
     if (!time || !isFinite(time) || isNaN(time)) return '0:00';
     const m = Math.floor(time / 60);
     const s = Math.floor(time % 60);
@@ -76,7 +76,7 @@ function CustomAudioPlayer({ audioUrl, userId }: { audioUrl: string; userId: str
         <h3 className="font-serif font-bold text-lg tracking-wide text-foreground">Ouvir gravação</h3>
       </div>
 
-      {/* Main Player Box Minimalista */}
+      {/* Main Player Box */}
       <div className="bg-[#151515] rounded-[1.5rem] py-5 flex flex-col sm:flex-row items-center gap-4 sm:gap-6 w-full relative px-4">
         {/* Hidden Audio */}
         <audio 
@@ -89,7 +89,7 @@ function CustomAudioPlayer({ audioUrl, userId }: { audioUrl: string; userId: str
           preload="metadata"
         />
 
-        {/* Play/Pause icon (sem bolha preenchida) */}
+        {/* Play/Pause */}
         <button 
           onClick={togglePlay}
           className="w-10 h-10 sm:w-12 sm:h-12 flex items-center justify-center shrink-0 cursor-pointer text-foreground/80 hover:text-white transition-colors hover:scale-105 active:scale-95"
@@ -98,7 +98,7 @@ function CustomAudioPlayer({ audioUrl, userId }: { audioUrl: string; userId: str
           {isPlaying ? <Pause className="w-6 h-6 fill-current" /> : <Play className="w-6 h-6 fill-current ml-1" />}
         </button>
 
-        {/* Timeline Component Estilo YouTube c/ Time Lado a Lado */}
+        {/* Timeline */}
         <div className="flex-1 flex items-center gap-3 w-full">
            <span className="text-[11px] sm:text-xs font-mono text-primary/70 opacity-90 w-8 text-right">
              {formatTime(currentTime)}
@@ -120,7 +120,7 @@ function CustomAudioPlayer({ audioUrl, userId }: { audioUrl: string; userId: str
            </span>
         </div>
 
-        {/* Action icons (Icones finais vazados) */}
+        {/* Actions */}
         <div className="flex items-center justify-center gap-5 shrink-0 sm:ml-2 text-foreground/50 w-full sm:w-auto mt-2 sm:mt-0">
            <button 
               onClick={() => { if(audioRef.current) audioRef.current.currentTime = 0; }} 
@@ -146,46 +146,159 @@ function CustomAudioPlayer({ audioUrl, userId }: { audioUrl: string; userId: str
   );
 }
 
-export default function AnalysisPage() {
-  const [expandedTurns, setExpandedTurns] = useState<Record<number, boolean>>({
-    7: true,
-    8: false
-  });
+// ========================== TRANSCRIPT CHAT BUBBLES ==========================
+interface TranscriptMessage {
+  role: string;
+  content: string;
+}
 
-  const [audioUrl, setAudioUrl] = useState<string | null>(null);
+function TranscriptChat({ messages }: { messages: TranscriptMessage[] }) {
+  if (!messages || messages.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center py-12 text-foreground/30">
+        <MessageSquare className="w-10 h-10 mb-3" />
+        <p className="text-sm font-semibold">Nenhuma transcrição disponível</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-3">
+      {messages.map((msg, i) => {
+        const isUser = msg.role === 'user';
+        return (
+          <div
+            key={i}
+            className={`flex items-end gap-2.5 ${isUser ? 'flex-row-reverse' : 'flex-row'}`}
+          >
+            {/* Avatar */}
+            <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 text-white shadow-md ${
+              isUser 
+                ? 'bg-gradient-to-br from-emerald-500 to-emerald-700' 
+                : 'bg-gradient-to-br from-slate-600 to-slate-800 border border-border'
+            }`}>
+              {isUser 
+                ? <User className="w-4 h-4" /> 
+                : <Bot className="w-4 h-4" />
+              }
+            </div>
+
+            {/* Bubble */}
+            <div className={`max-w-[75%] px-4 py-3 rounded-2xl text-sm leading-relaxed shadow-sm ${
+              isUser
+                ? 'bg-emerald-600/20 border border-emerald-500/30 text-emerald-100 rounded-br-md'
+                : 'bg-[#1a1a1a] border border-border text-foreground/85 rounded-bl-md'
+            }`}>
+              {/* Label */}
+              <span className={`text-[10px] font-bold uppercase tracking-widest block mb-1 ${
+                isUser ? 'text-emerald-400/80' : 'text-foreground/40'
+              }`}>
+                {isUser ? 'Vendedor' : 'Cliente'}
+              </span>
+              <p className="font-medium">{msg.content}</p>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// ========================== MAIN PAGE ==========================
+interface SimulationData {
+  audio_recording_url: string | null;
+  transcript: TranscriptMessage[] | null;
+  difficulty_level: string;
+  persona_id: string;
+  created_at: string;
+}
+
+export default function AnalysisPage() {
+  const [simulation, setSimulation] = useState<SimulationData | null>(null);
+  const [personaName, setPersonaName] = useState('—');
   const [activeUserId, setActiveUserId] = useState<string | null>(null);
-  const [isLoadingAudio, setIsLoadingAudio] = useState(true);
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     async function loadSimulationData() {
       const { data: authData } = await supabase.auth.getUser();
-      if (authData?.user) {
-        setActiveUserId(authData.user.id);
+      if (!authData?.user) {
+        setIsLoading(false);
+        return;
+      }
 
-        const { data, error } = await supabase
-          .from('simulations')
-          .select('audio_recording_url')
-          .eq('user_id', authData.user.id)
-          .order('created_at', { ascending: false })
-          .limit(1)
-          .single();
+      setActiveUserId(authData.user.id);
 
-        if (data?.audio_recording_url) {
-          setAudioUrl(data.audio_recording_url);
+      // Buscar a última simulação
+      const { data, error } = await supabase
+        .from('simulations')
+        .select('audio_recording_url, transcript, difficulty_level, persona_id, created_at')
+        .eq('user_id', authData.user.id)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .single();
+
+      if (data) {
+        // Parsear o transcript — pode vir como string JSON ou já como array
+        let parsedTranscript: TranscriptMessage[] | null = null;
+        if (data.transcript) {
+          if (typeof data.transcript === 'string') {
+            try {
+              parsedTranscript = JSON.parse(data.transcript);
+            } catch {
+              parsedTranscript = null;
+            }
+          } else if (Array.isArray(data.transcript)) {
+            parsedTranscript = data.transcript as TranscriptMessage[];
+          }
+        }
+
+        setSimulation({
+          audio_recording_url: data.audio_recording_url,
+          transcript: parsedTranscript,
+          difficulty_level: data.difficulty_level,
+          persona_id: data.persona_id,
+          created_at: data.created_at,
+        });
+
+        // Busca o nome da persona
+        if (data.persona_id) {
+          const { data: persona } = await supabase
+            .from('personas')
+            .select('name')
+            .eq('id', data.persona_id)
+            .single();
+          if (persona) setPersonaName(persona.name);
         }
       }
-      setIsLoadingAudio(false);
+
+      if (error) console.error('Erro ao buscar simulação:', error);
+      setIsLoading(false);
     }
     loadSimulationData();
   }, []);
 
-  const toggleTurn = (turnId: number) => {
-    setExpandedTurns(prev => ({ ...prev, [turnId]: !prev[turnId] }));
+  const difficultyLabel = (d: string) => {
+    const map: Record<string, string> = { facil: 'Fácil', medio: 'Médio', dificil: 'Difícil' };
+    return map[d] || d;
   };
+
+  const messageCount = simulation?.transcript?.length ?? 0;
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="flex flex-col items-center gap-4">
+          <Loader2 className="w-10 h-10 text-primary animate-spin" />
+          <p className="text-foreground/60 font-bold uppercase tracking-widest text-xs">Carregando análise...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-background font-sans text-foreground pb-20 fade-in animate-in duration-500">
-      {/* Header Minimalista (Voltar) */}
+      {/* Header */}
       <header className="p-4 px-6 border-b border-border/50 bg-panel flex items-center shadow-sm">
         <Link href="/dashboard" className="flex items-center gap-2 text-foreground/50 hover:text-foreground transition-colors cursor-pointer group">
           <ChevronLeft className="w-5 h-5 group-hover:-translate-x-1 transition-transform" />
@@ -196,28 +309,23 @@ export default function AnalysisPage() {
       <main className="max-w-4xl mx-auto p-4 md:p-8 flex flex-col gap-6 mt-4">
         
         {/* Banner de Resultado */}
-        <div className="bg-[#2a1111] border border-red-900/50 rounded-3xl p-5 flex items-start gap-4 shadow-lg shadow-red-900/10">
-          <div className="bg-red-500/20 p-2.5 rounded-full shrink-0 mt-1 border border-red-500/30">
-            <AlertTriangle className="w-6 h-6 text-red-500" />
+        <div className="bg-[#111827] border border-blue-900/50 rounded-3xl p-5 flex items-start gap-4 shadow-lg shadow-blue-900/10">
+          <div className="bg-blue-500/20 p-2.5 rounded-full shrink-0 mt-1 border border-blue-500/30">
+            <Sparkles className="w-6 h-6 text-blue-400" />
           </div>
           <div className="pt-1">
-            <h2 className="text-xl font-bold text-red-500 mb-1 tracking-wide">Não foi dessa vez</h2>
-            <p className="text-foreground/60 text-sm">A conversa esfriou, a conexão foi perdida, mas isso é puro aprendizado no Outbound.</p>
+            <h2 className="text-xl font-bold text-blue-400 mb-1 tracking-wide">Análise da Simulação</h2>
+            <p className="text-foreground/60 text-sm">Revise sua performance — ouça o áudio e releia a conversa completa.</p>
           </div>
         </div>
 
         {/* ======================= MÓDULO DE ÁUDIO ===================== */}
-        {isLoadingAudio ? (
-           <div className="bg-[#121212] rounded-[1.5rem] p-6 flex items-center justify-center gap-3 w-full mt-4 animate-pulse h-[100px]">
-              <Loader2 className="w-6 h-6 text-primary animate-spin" />
-              <p className="text-foreground/70 font-bold uppercase tracking-widest text-xs">Carregando Gravação...</p>
-           </div>
-        ) : audioUrl && activeUserId ? (
-           <CustomAudioPlayer audioUrl={audioUrl} userId={activeUserId} />
+        {simulation?.audio_recording_url && activeUserId ? (
+           <CustomAudioPlayer audioUrl={simulation.audio_recording_url} userId={activeUserId} />
         ) : (
            <div className="bg-[#121212] rounded-[1.5rem] p-6 flex flex-col items-center justify-center gap-2 w-full mt-4 h-[100px] opacity-70">
               <Volume2 className="w-6 h-6 text-foreground/20" />
-              <p className="text-foreground/40 font-semibold italic text-sm">Áudio indisponível</p>
+              <p className="text-foreground/40 font-semibold italic text-sm">Áudio indisponível para esta simulação</p>
            </div>
         )}
 
@@ -228,7 +336,7 @@ export default function AnalysisPage() {
               <Target className="w-4 h-4 text-accent" />
               <span className="text-[10px] font-bold uppercase tracking-widest text-accent/80">Cenário</span>
             </div>
-            <span className="font-bold text-base sm:text-lg">Técnico de TI</span>
+            <span className="font-bold text-base sm:text-lg">{personaName}</span>
           </div>
           
           <div className="bg-panel border border-border rounded-3xl p-5 flex flex-col justify-center items-center sm:items-start transition-colors hover:border-foreground/20">
@@ -236,7 +344,7 @@ export default function AnalysisPage() {
               <TrendingUp className="w-4 h-4 text-accent" />
               <span className="text-[10px] font-bold uppercase tracking-widest text-accent/80">Dificuldade</span>
             </div>
-            <span className="font-bold text-base sm:text-lg">Difícil</span>
+            <span className="font-bold text-base sm:text-lg">{simulation ? difficultyLabel(simulation.difficulty_level) : '—'}</span>
           </div>
           
           <div className="bg-panel border border-border rounded-3xl p-5 flex flex-col justify-center items-center sm:items-start transition-colors hover:border-foreground/20">
@@ -244,158 +352,20 @@ export default function AnalysisPage() {
               <MessageSquare className="w-4 h-4 text-accent" />
               <span className="text-[10px] font-bold uppercase tracking-widest text-accent/80">Mensagens</span>
             </div>
-            <span className="font-bold text-base sm:text-lg">8 trocas</span>
+            <span className="font-bold text-base sm:text-lg">{messageCount} trocas</span>
           </div>
         </div>
 
-        {/* Bloco de "Nota Geral" */}
-        <div className="bg-[#1e1313] border border-red-900/30 rounded-[2rem] p-8 relative overflow-hidden mt-4 shadow-xl">
-          <div className="absolute top-0 right-0 w-64 h-64 bg-red-600/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/4" />
-          
-          <div className="flex items-center justify-between mb-8 relative">
-            <div className="flex items-center gap-3">
-              <Sparkles className="w-7 h-7 text-accent" />
-              <h3 className="text-3xl font-serif font-bold text-foreground">Nota Geral</h3>
-            </div>
-            <div className="text-6xl font-black text-red-500 tracking-tighter drop-shadow-sm">1.0</div>
-          </div>
-          
-          <div className="w-full h-2.5 bg-background/50 rounded-full mb-8 overflow-hidden relative border border-black/20">
-            <div className="h-full bg-red-500 w-[10%] rounded-full shadow-[0_0_10px_rgba(239,68,68,0.5)]" />
+        {/* ======================= TRANSCRIÇÃO ===================== */}
+        <div className="mt-4 flex flex-col gap-4">
+          <div className="flex items-center gap-2.5 ml-1">
+            <MessageSquare className="w-5 h-5 text-accent" />
+            <h3 className="font-serif font-bold text-lg tracking-wide text-foreground">Transcrição Completa</h3>
           </div>
 
-          <p className="text-foreground/70 leading-relaxed text-sm sm:text-base relative z-10 font-medium">
-            A conversa foi um fracasso completo, pois o SDR nunca estabeleceu um frame de interação profissional de valor, agindo como um tirador de pedidos. O famoso "Pitch Prematuro" gerou atrito imediato com o Líder Técnico. Faltaram perguntas abertas do framework SPIN. 
-          </p>
-        </div>
-
-        {/* Analise Turn-by-Turn expansiva */}
-        <div className="mt-8 flex flex-col gap-6">
-          <h3 className="font-semibold text-lg ml-2 mb-2 tracking-wide">Linha do Tempo</h3>
-
-          {/*================= Card Mock de Fala Expansível 1 (Turno 7) ==================*/}
-          <div className="bg-panel border border-border hover:border-accent/30 transition-colors rounded-[2rem] p-6 sm:p-8 shadow-lg shadow-accent/5 overflow-hidden">
-             
-             {/* Header clicável */}
-             <div 
-                className="flex items-start gap-4 cursor-pointer select-none group"
-                onClick={() => toggleTurn(7)}
-             >
-               <div className="w-12 h-12 rounded-full bg-accent/20 text-accent text-lg font-bold flex items-center justify-center shrink-0 mt-1 border border-accent/30 shadow-inner group-hover:bg-accent/30 transition-colors">
-                 7
-               </div>
-               
-               <div className="flex-1 mt-2">
-                 <p className="font-bold text-lg leading-relaxed text-white">
-                   "Olá Líder Técnico, desculpa interromper, mas não podia deixar de notar que a equipe cresceu muito rápido."
-                 </p>
-                 
-                 <div className="flex gap-3 mt-5">
-                   <div className="flex items-center gap-1.5 px-3 py-1 rounded-full border border-green-500/20 bg-green-500/10 text-green-500 text-xs font-bold font-mono">
-                     <ThumbsUp className="w-3.5 h-3.5" /> 2
-                   </div>
-                   <div className="flex items-center gap-1.5 px-3 py-1 rounded-full border border-red-500/20 bg-red-500/10 text-red-500 text-xs font-bold font-mono">
-                     <ThumbsDown className="w-3.5 h-3.5" /> 1
-                   </div>
-                 </div>
-               </div>
-               
-               {/* Seta Dinamica Baseada no Estado */}
-               <button className="text-foreground/40 p-2 transition-colors mt-2">
-                 <ChevronUp className={`w-5 h-5 transition-transform duration-300 ${expandedTurns[7] ? 'rotate-0' : 'rotate-180'}`} />
-               </button>
-             </div>
-
-             {/* Corpo Expansível */}
-             <div className={`transition-all duration-300 flex flex-col gap-6 ${expandedTurns[7] ? 'max-h-[1000px] border-t border-border/60 mt-8 pt-8 opacity-100' : 'max-h-0 min-h-0 border-t-0 p-0 m-0 opacity-0 overflow-hidden'}`}>
-               <div>
-                 <h4 className="text-xs font-black tracking-[0.1em] text-green-500 uppercase mb-4 opacity-90">Pontos Positivos</h4>
-                 <ul className="flex flex-col gap-3">
-                   <li className="flex items-start gap-3 text-sm text-foreground/80 leading-relaxed font-medium">
-                     <ThumbsUp className="w-4 h-4 text-green-500 shrink-0 mt-0.5" />
-                     Elogio contextual, o que seta um bom rapport de observação para Outbound.
-                   </li>
-                 </ul>
-               </div>
-
-               <div>
-                 <h4 className="text-xs font-black tracking-[0.1em] text-red-500 uppercase mb-4 opacity-90">Pontos Negativos</h4>
-                 <ul className="flex flex-col gap-3">
-                   <li className="flex items-start gap-3 text-sm text-foreground/80 leading-relaxed font-medium">
-                     <ThumbsDown className="w-4 h-4 text-red-500 shrink-0 mt-0.5" />
-                     O "Desculpa interromper" destrói sua autoridade como especialista nos primeiros segundos de uma ligação complexa.
-                   </li>
-                 </ul>
-               </div>
-
-               <div className="bg-[#241c0e] border border-accent/20 rounded-2xl p-5 mt-2 shadow-inner">
-                 <div className="flex items-center gap-2 mb-3 text-accent opacity-90">
-                   <Lightbulb className="w-4 h-4 fill-accent" />
-                   <h4 className="text-xs font-bold uppercase tracking-widest">Sugestão de Alternativa</h4>
-                 </div>
-                 <p className="text-sm font-bold text-foreground/90 italic leading-relaxed">
-                   "Olá! Notei a rodada de contratações recente de vocês, o que sempre traz desafios de escalabilidade..."
-                 </p>
-               </div>
-             </div>
+          <div className="bg-panel border border-border rounded-[2rem] p-6 sm:p-8 shadow-lg overflow-hidden">
+            <TranscriptChat messages={simulation?.transcript ?? []} />
           </div>
-
-          {/*================= Card Mock de Fala Expansível 2 (Turno 8) ==================*/}
-          <div className="bg-panel border border-border hover:border-accent/30 transition-colors rounded-[2rem] p-6 sm:p-8 shadow-lg shadow-accent/5 overflow-hidden">
-             
-             {/* Header clicável */}
-             <div 
-                className="flex items-start gap-4 cursor-pointer select-none group"
-                onClick={() => toggleTurn(8)}
-             >
-               <div className="w-12 h-12 rounded-full bg-accent/10 border border-border text-accent/70 text-lg font-bold flex items-center justify-center shrink-0 mt-1 transition-colors">
-                 8
-               </div>
-               
-               <div className="flex-1 mt-2">
-                 <p className={`font-bold text-lg leading-relaxed text-foreground/70 italic ${!expandedTurns[8] ? 'line-clamp-2' : ''}`}>
-                   "Certo Líder... bom, não tem budget. Tem como eu ligar semana que vem pra reavaliarmos se entra uma verba nova pra tentar fechar o negócio?"
-                 </p>
-                 
-                 <div className="flex gap-3 mt-5">
-                   <div className="flex items-center gap-1.5 px-3 py-1 rounded-full border border-green-500/10 bg-green-500/5 text-green-500/50 text-xs font-bold font-mono">
-                     <ThumbsUp className="w-3.5 h-3.5" /> 0
-                   </div>
-                   <div className="flex items-center gap-1.5 px-3 py-1 rounded-full border border-accent/10 bg-accent/5 text-accent/50 text-xs font-bold font-mono">
-                     <Lightbulb className="w-3.5 h-3.5" /> Dica
-                   </div>
-                 </div>
-               </div>
-               
-               <button className="text-foreground/40 p-2 transition-colors mt-2">
-                 <ChevronUp className={`w-5 h-5 transition-transform duration-300 ${expandedTurns[8] ? 'rotate-0' : 'rotate-180'}`} />
-               </button>
-             </div>
-
-             {/* Corpo Expansível */}
-             <div className={`transition-all duration-300 flex flex-col gap-6 ${expandedTurns[8] ? 'max-h-[1000px] border-t border-border/60 mt-8 pt-8 opacity-100' : 'max-h-0 min-h-0 border-t-0 p-0 m-0 opacity-0 overflow-hidden'}`}>
-               <div>
-                 <h4 className="text-xs font-black tracking-[0.1em] text-red-500 uppercase mb-4 opacity-90">Pontos Negativos</h4>
-                 <ul className="flex flex-col gap-3">
-                   <li className="flex items-start gap-3 text-sm text-foreground/80 leading-relaxed font-medium">
-                     <ThumbsDown className="w-4 h-4 text-red-500 shrink-0 mt-0.5" />
-                     Pedir uma revisão de budget na semana seguinte soa desesperado e ingênuo num ciclo de vendas complexo.
-                   </li>
-                 </ul>
-               </div>
-
-               <div className="bg-[#241c0e] border border-accent/20 rounded-2xl p-5 mt-2 shadow-inner">
-                 <div className="flex items-center gap-2 mb-3 text-accent opacity-90">
-                   <Lightbulb className="w-4 h-4 fill-accent" />
-                   <h4 className="text-xs font-bold uppercase tracking-widest">Sugestão de Alternativa</h4>
-                 </div>
-                 <p className="text-sm font-bold text-foreground/90 italic leading-relaxed">
-                   "Entendo completamente. Sem problemas. Pra não desperdiçarmos o tempo um do outro, faz sentido marcarmos apenas para H2? Aí os projetos e o budget da AWS já estarão melhor alinhados."
-                 </p>
-               </div>
-             </div>
-          </div>
-
         </div>
 
       </main>

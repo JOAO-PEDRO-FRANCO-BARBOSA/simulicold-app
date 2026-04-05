@@ -1,6 +1,6 @@
 // src/app/api/chat/route.ts
 import { createClient } from '@supabase/supabase-js';
-import { streamText } from 'ai';
+import { generateText } from 'ai';
 import { google } from '@ai-sdk/google'; // Alterado de openai para google
 
 export const runtime = 'edge';
@@ -33,15 +33,17 @@ export async function POST(req: Request) {
     };
     basePrompt += difficultyRules[difficulty_level as keyof typeof difficultyRules] || '';
 
-    // Chamada para o Gemini 2.5 Flash-Lite conforme sua decisão
-    const result = streamText({
-      model: google('gemini-2.5-flash-lite'), // Modelo ultra rápido que você escolheu
+    // Chamada para o Gemini 2.5 Flash
+    const { text } = await generateText({
+      model: google('gemini-2.5-flash'), // Modelo atualizado
       system: basePrompt,
       messages: messages,
       temperature: 0.8,
     });
 
-    return result.toDataStreamResponse();
+    return new Response(JSON.stringify({ text }), {
+      headers: { 'Content-Type': 'application/json' },
+    });
   } catch (error: any) {
     return new Response(error.message, { status: 500 });
   }

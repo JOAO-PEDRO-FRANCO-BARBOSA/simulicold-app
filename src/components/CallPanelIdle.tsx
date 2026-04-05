@@ -4,9 +4,10 @@ import { Phone, Sparkles, MessageSquare } from 'lucide-react';
 
 interface Props {
   onStart: () => void;
+  disabled?: boolean;
 }
 
-export function CallPanelIdle({ onStart }: Props) {
+export function CallPanelIdle({ onStart, disabled }: Props) {
   return (
     <div className="flex flex-col h-full gap-4">
       {/* Call Main Area (Pré-chamada) */}
@@ -28,11 +29,23 @@ export function CallPanelIdle({ onStart }: Props) {
 
           <button 
             onClick={onStart}
-            className="flex items-center gap-3 bg-primary hover:bg-primary-hover text-white px-10 py-4 rounded-full font-bold text-lg transition-transform hover:scale-105 active:scale-95 shadow-[0_0_30px_rgba(219,39,119,0.25)] cursor-pointer tracking-wide"
+            disabled={disabled}
+            title={disabled ? 'Selecione um perfil de cliente antes de iniciar' : undefined}
+            className={`flex items-center gap-3 bg-primary text-white px-10 py-4 rounded-full font-bold text-lg transition-transform shadow-[0_0_30px_rgba(219,39,119,0.25)] tracking-wide ${
+              disabled 
+                ? 'opacity-40 cursor-not-allowed' 
+                : 'hover:bg-primary-hover hover:scale-105 active:scale-95 cursor-pointer'
+            }`}
           >
             <Phone className="w-6 h-6 fill-current" />
             <span>Iniciar Chamada</span>
           </button>
+
+          {disabled && (
+            <p className="text-amber-400/90 text-sm mt-4 animate-pulse font-medium text-center">
+              ⚠ Selecione uma persona antes de iniciar
+            </p>
+          )}
         </div>
       </div>
 

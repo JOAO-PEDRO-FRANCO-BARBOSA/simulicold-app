@@ -13,12 +13,14 @@ import { supabase } from '@/lib/supabase';
 export default function DashboardPage() {
   const [callState, setCallState] = useState<'idle' | 'active' | 'ended'>('idle');
   
-  // Lifting State para compartilhar a Configuração selecionada com o gravador de voz
   const [selectedPersonaId, setSelectedPersonaId] = useState('');
   const [selectedDifficulty, setSelectedDifficulty] = useState('medio');
   
   // Guardamos a sessão do Usuário logado
   const [userId, setUserId] = useState('');
+
+  // Mensagens da Conversa (STT / Gemini)
+  const [messages, setMessages] = useState<{ role: string, content: string }[]>([]);
 
   useEffect(() => {
     // Tenta pegar a sessão atual limpa do Auth
@@ -48,15 +50,23 @@ export default function DashboardPage() {
                 personaId={selectedPersonaId}
                 difficulty={selectedDifficulty}
                 userId={userId}
+                messages={messages}
+                setMessages={setMessages}
               />
             )}
           </section>
 
           <section className="h-full flex flex-col min-h-[600px]">
             {callState === 'idle' ? (
-              <CallPanelIdle onStart={() => setCallState('active')} />
+              <CallPanelIdle 
+                disabled={!selectedPersonaId}
+                onStart={() => {
+                  setMessages([]); // Reset messages on new call
+                  setCallState('active');
+                }} 
+              />
             ) : (
-               <TranscriptionPanel />
+               <TranscriptionPanel messages={messages} />
             )}
           </section>
 
