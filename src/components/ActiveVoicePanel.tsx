@@ -163,6 +163,13 @@ export function ActiveVoicePanel({ onEnd, userId, personaId, difficulty, message
 
   // ===================================================================
   // handleUserSpeech — Processa fala do usuário → Chat API → TTS
+  //
+  // ARQUITETURA DE BAIXA LATÊNCIA:
+  // 1. POST /api/chat → obter texto da persona (PRIORIDADE MÁXIMA)
+  // 2. IMEDIATAMENTE após receber texto → disparar speak() SEM await
+  //    → TTS começa a gerar áudio enquanto a UI já atualiza
+  // 3. O avaliador Black Belt NÃO roda aqui — roda apenas no handleForceEnd
+  //    em background, sem bloquear a conversa
   // ===================================================================
   const handleUserSpeech = async (text: string) => {
     if (!text.trim() || !isActiveRef.current) {
@@ -177,12 +184,11 @@ export function ActiveVoicePanel({ onEnd, userId, personaId, difficulty, message
     setIsProcessing(true);
 
     try {
-      console.log('Enviando Persona ID:', personaId);
-
       if (!personaId) {
         throw new Error('Nenhuma persona selecionada. Volte e selecione um perfil de cliente.');
       }
 
+      // ── ETAPA 1: Obter resposta da persona (PRIORIDADE MÁXIMA) ──
       const response = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -201,12 +207,14 @@ export function ActiveVoicePanel({ onEnd, userId, personaId, difficulty, message
       const data = await response.json();
       const botReply = data.text;
 
+      // ── ETAPA 2: Atualizar UI IMEDIATAMENTE ──
       const updatedMessages = [...newMessages, { role: 'assistant', content: botReply }];
       setMessages(updatedMessages);
 
-      // Agora falar via ElevenLabs + Web Audio API
+      // ── ETAPA 3: Disparar TTS SEM esperar (fire-and-forget) ──
       // speak() gerencia seu próprio lifecycle (isSpeakingRef, isFetchingRef)
-      await speak(botReply);
+      // Não usar await para não bloquear — o áudio começa a tocar ASAP
+      speak(botReply);
 
     } catch (err: any) {
       console.error(err);
@@ -464,6 +472,7 @@ export function ActiveVoicePanel({ onEnd, userId, personaId, difficulty, message
 
   // ===================================================================
   // handleForceEnd — Encerrar simulação, salvar áudio misto + transcript
+  //                  + disparar análise de vendas com Gemini
   // ===================================================================
   const handleForceEnd = async () => {
     isActiveRef.current = false;
@@ -525,18 +534,64 @@ export function ActiveVoicePanel({ onEnd, userId, personaId, difficulty, message
       }
 
       // Salvar simulação com transcript JSONB e URL do áudio
-      const { error: insertError } = await supabase.from('simulations').insert({
-        user_id: userId,
-        persona_id: personaId,
-        difficulty_level: difficulty,
-        audio_recording_url: audioPublicUrl || null,
-        transcript: messagesRef.current, // JSONB: [{role, content}, ...]
-        status: 'completed'
-      });
+      const { data: insertData, error: insertError } = await supabase
+        .from('simulations')
+        .insert({
+          user_id: userId,
+          persona_id: personaId,
+          difficulty_level: difficulty,
+          audio_recording_url: audioPublicUrl || null,
+          transcript: messagesRef.current, // JSONB: [{role, content}, ...]
+          status: 'completed'
+        })
+        .select('id')
+        .single();
 
       if (insertError) {
         console.error('Erro ao salvar simulação:', insertError);
         alert('Falha ao salvar simulação: ' + insertError.message);
+      }
+
+      // ── Disparar análise de vendas com Gemini (silenciosamente) ──
+      // Roda em background: não bloqueia o retorno do usuário ao dashboard
+      const simulationId = insertData?.id;
+      const finalTranscript = messagesRef.current;
+
+      if (simulationId && finalTranscript.length > 0) {
+        // Fire-and-forget: análise roda em background
+        (async () => {
+          try {
+            console.log('🧠 Disparando análise de vendas para simulação:', simulationId);
+            const analyzeResponse = await fetch('/api/analyze', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ messages: finalTranscript }),
+            });
+
+            if (!analyzeResponse.ok) {
+              const errText = await analyzeResponse.text();
+              console.error('⚠️ Análise falhou:', errText);
+              return;
+            }
+
+            const analysisData = await analyzeResponse.json();
+            console.log('✅ Análise recebida, score geral:', analysisData.overall_score);
+
+            // UPDATE na simulação com os dados de análise
+            const { error: updateError } = await supabase
+              .from('simulations')
+              .update({ analysis_data: analysisData })
+              .eq('id', simulationId);
+
+            if (updateError) {
+              console.error('⚠️ Erro ao salvar análise:', updateError);
+            } else {
+              console.log('✅ Análise salva com sucesso no banco!');
+            }
+          } catch (analyzeErr) {
+            console.error('⚠️ Erro na análise de vendas:', analyzeErr);
+          }
+        })();
       }
     } catch (err: any) {
       console.error(err);

@@ -1,6 +1,6 @@
 // src/app/api/tts/route.ts
-// Rota de Text-to-Speech usando ElevenLabs API
-// Recebe texto + personaId, retorna áudio MP3 de alta qualidade
+// Rota de Text-to-Speech usando ElevenLabs API — STREAMING
+// Recebe texto + personaId, retorna stream de áudio MP3 para playback imediato
 
 export const runtime = 'nodejs';
 
@@ -34,8 +34,9 @@ export async function POST(req: Request) {
     // Selecionar voz: usa mapeamento ou default (Adam)
     const voiceId = VOICE_MAP[personaId] || VOICE_MAP.default;
 
+    // Usar endpoint de STREAMING da ElevenLabs para menor latência
     const elevenLabsResponse = await fetch(
-      `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`,
+      `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}/stream`,
       {
         method: 'POST',
         headers: {
@@ -45,13 +46,15 @@ export async function POST(req: Request) {
         },
         body: JSON.stringify({
           text,
-          model_id: 'eleven_multilingual_v2', // Suporta pt-BR com qualidade alta
+          model_id: 'eleven_turbo_v2_5', // Menor latência + cadência mais rápida para conversação
           voice_settings: {
             stability: 0.4,          // Menos estabilidade = mais expressividade
             similarity_boost: 0.8,   // Alta fidelidade à voz original
             style: 0.15,             // Leve estilo emocional
             use_speaker_boost: true,
           },
+          // optimize_streaming_latency: 3 = máxima otimização de latência
+          optimize_streaming_latency: 3,
         }),
       }
     );
@@ -65,14 +68,17 @@ export async function POST(req: Request) {
       );
     }
 
-    // Retornar o áudio binário diretamente ao cliente
-    const audioArrayBuffer = await elevenLabsResponse.arrayBuffer();
+    // STREAMING: Pipe o ReadableStream do ElevenLabs direto para o cliente
+    // O frontend pode começar a decodificar e tocar enquanto ainda chega mais dados
+    if (!elevenLabsResponse.body) {
+      return new Response('ElevenLabs retornou corpo vazio', { status: 502 });
+    }
 
-    return new Response(audioArrayBuffer, {
+    return new Response(elevenLabsResponse.body, {
       status: 200,
       headers: {
         'Content-Type': 'audio/mpeg',
-        'Content-Length': audioArrayBuffer.byteLength.toString(),
+        'Transfer-Encoding': 'chunked',
         'Cache-Control': 'no-store', // Cada fala é única, não cachear
       },
     });

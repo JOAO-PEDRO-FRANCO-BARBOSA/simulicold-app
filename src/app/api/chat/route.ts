@@ -23,13 +23,16 @@ export async function POST(req: Request) {
 
     if (error || !persona) return new Response('Persona não encontrada', { status: 404 });
 
-    let basePrompt = persona.prompt_system;
+    // REGRA ABSOLUTA de realismo de cold call — prepended antes de qualquer persona
+    const coldCallRule = `REGRA ABSOLUTA E INQUEBRÁVEL: Você está em uma cold call telefônica real. Responda em no máximo 1 ou 2 frases curtas. Seja direto, reativo e não faça discursos. Imite a pressa de um executivo ocupado que foi interrompido. NUNCA escreva parágrafos longos.\n\n`;
+
+    let basePrompt = coldCallRule + persona.prompt_system;
 
     // Injeção de dificuldade baseada no seu schema
     const difficultyRules = {
-      facil: '\n\n[Dificuldade: FÁCIL - Seja mais receptivo e ouça o pitch.]',
-      medio: '\n\n[Dificuldade: MÉDIO - Faça objeções comuns de B2B.]',
-      dificil: '\n\n[Dificuldade: DIFÍCIL - Seja ríspido e queira desligar rápido.]'
+      facil: '\n\n[Dificuldade: FÁCIL - Seja mais receptivo e ouça o pitch, mas ainda assim dê respostas curtas.]',
+      medio: '\n\n[Dificuldade: MÉDIO - Faça objeções comuns de B2B. Respostas secas e curtas.]',
+      dificil: '\n\n[Dificuldade: DIFÍCIL - Seja ríspido, impaciente e queira desligar rápido. Máximo 1 frase.]'
     };
     basePrompt += difficultyRules[difficulty_level as keyof typeof difficultyRules] || '';
 
