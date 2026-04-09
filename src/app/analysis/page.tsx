@@ -2,12 +2,13 @@
 
 import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import {
   AlertTriangle, Volume2, Play, Pause, RotateCcw, Target, TrendingUp,
   MessageSquare, Sparkles, ChevronLeft, Download, Loader2, User, Bot,
   Award, BookOpen, Shield, Zap, Star, ArrowUpRight, BarChart3, RefreshCw,
-  ThumbsUp, ThumbsDown, Lightbulb
+  ThumbsUp, ThumbsDown, Lightbulb, Save, CheckCircle2
 } from 'lucide-react';
 
 // ========================== TYPES ==========================
@@ -497,6 +498,25 @@ export default function AnalysisPage() {
   const [activeUserId, setActiveUserId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isAnalysisLoading, setIsAnalysisLoading] = useState(false);
+  const [isSaved, setIsSaved] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+
+  const handleSave = async () => {
+    if (!simulation?.id || isSaved || isSaving) return;
+    setIsSaving(true);
+    try {
+      const { error } = await supabase
+        .from('simulations')
+        .update({ is_saved: true })
+        .eq('id', simulation.id);
+      if (error) throw error;
+      setIsSaved(true);
+    } catch (err) {
+      console.error('Erro ao salvar simulação:', err);
+    } finally {
+      setIsSaving(false);
+    }
+  };
 
   const loadSimulationData = async () => {
     const { data: authData } = await supabase.auth.getUser();
@@ -507,14 +527,24 @@ export default function AnalysisPage() {
 
     setActiveUserId(authData.user.id);
 
-    // Buscar a última simulação (incluindo analysis_data)
-    const { data, error } = await supabase
+    // Checar se há um ID específico na URL (?id=xxx)
+    const urlParams = new URLSearchParams(window.location.search);
+    const specificId = urlParams.get('id');
+
+    let query = supabase
       .from('simulations')
-      .select('id, audio_recording_url, transcript, analysis_data, difficulty_level, persona_id, created_at')
-      .eq('user_id', authData.user.id)
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .single();
+      .select('id, audio_recording_url, transcript, analysis_data, difficulty_level, persona_id, created_at, is_saved')
+      .eq('user_id', authData.user.id);
+
+    if (specificId) {
+      // Buscar simulação específica pelo ID
+      query = query.eq('id', specificId);
+    } else {
+      // Buscar a última simulação
+      query = query.order('created_at', { ascending: false }).limit(1);
+    }
+
+    const { data, error } = await query.single();
 
     if (data) {
       // Parsear o transcript
@@ -561,6 +591,11 @@ export default function AnalysisPage() {
       // Se a análise ainda está pendente, checar de novo em 5s
       if (!parsedAnalysis && Array.isArray(parsedTranscript) && parsedTranscript.length > 0) {
         setIsAnalysisLoading(true);
+      }
+
+      // Inicializar estado do botão salvar a partir do banco
+      if (data.is_saved) {
+        setIsSaved(true);
       }
 
       // Busca o nome da persona
@@ -637,11 +672,42 @@ export default function AnalysisPage() {
   return (
     <div className="min-h-screen bg-background font-sans text-foreground pb-20 fade-in animate-in duration-500">
       {/* Header */}
-      <header className="p-4 px-6 border-b border-border/50 bg-panel flex items-center shadow-sm">
+      <header className="p-4 px-6 border-b border-border/50 bg-panel flex items-center justify-between shadow-sm">
         <Link href="/dashboard" className="flex items-center gap-2 text-foreground/50 hover:text-foreground transition-colors cursor-pointer group">
           <ChevronLeft className="w-5 h-5 group-hover:-translate-x-1 transition-transform" />
           <span className="font-semibold text-sm">Voltar para o Simulador B2B</span>
         </Link>
+
+        {/* Botão de Salvar Simulação */}
+        {simulation?.id && (
+          <button
+            onClick={handleSave}
+            disabled={isSaved || isSaving}
+            className={`flex items-center gap-2 px-4 py-2 rounded-xl border text-sm font-semibold transition-all cursor-pointer ${
+              isSaved
+                ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-400'
+                : 'border-border hover:border-primary/50 hover:bg-primary/5 text-foreground/60 hover:text-primary'
+            } disabled:cursor-default`}
+            title={isSaved ? 'Simulação salva!' : 'Salvar nos favoritos'}
+          >
+            {isSaved ? (
+              <>
+                <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                <span>Salvo</span>
+              </>
+            ) : isSaving ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                <span>Salvando...</span>
+              </>
+            ) : (
+              <>
+                <Save className="w-4 h-4" />
+                <span>Salvar</span>
+              </>
+            )}
+          </button>
+        )}
       </header>
 
       <main className="max-w-4xl mx-auto p-4 md:p-8 flex flex-col gap-6 mt-4">
