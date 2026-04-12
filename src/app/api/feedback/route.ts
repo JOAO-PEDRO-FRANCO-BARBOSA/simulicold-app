@@ -32,6 +32,8 @@ export async function POST(req: Request) {
       tls: {
         rejectUnauthorized: false,
       },
+      logger: true, // Adicionado para vermos o log no terminal
+      debug: true,  // Adicionado para vermos a transação SMTP
     });
 
     await transporter.sendMail({

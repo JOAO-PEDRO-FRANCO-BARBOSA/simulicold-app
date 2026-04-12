@@ -1,336 +1,250 @@
-'use client';
+import Link from 'next/link';
+import { Mic, FileText, Users, History } from 'lucide-react';
+import Image from 'next/image';
 
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
-import { Mail, Lock, ArrowRight, UserPlus, LogIn, AlertCircle, CheckCircle, RefreshCw, Eye, EyeOff, Loader2 } from 'lucide-react';
-import { supabase } from '@/lib/supabase';
-
-export default function AuthPage() {
-  const router = useRouter();
-  const [isLogin, setIsLogin] = useState(true);
-
-  // States
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
-  const [showPassword, setShowPassword] = useState(false);
-  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
-  const [errorMsg, setErrorMsg] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [registrationSuccess, setRegistrationSuccess] = useState(false);
-  const [resendCooldown, setResendCooldown] = useState(false);
-
-  const clearErrors = () => setErrorMsg('');
-
-  // Handler Real do Login via Auth
-  const handleLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
-    clearErrors();
-    setLoading(true);
-
-    const { error } = await supabase.auth.signInWithPassword({
-      email,
-      password
-    });
-
-    if (error) {
-      setErrorMsg(error.message);
-      setLoading(false);
-    } else {
-      router.push('/dashboard');
-    }
-  };
-
-  // Handler Real do Cadastro vis Auth
-  const handleRegister = async (e: React.FormEvent) => {
-    e.preventDefault();
-    clearErrors();
-
-    if (password !== confirmPassword) {
-      setErrorMsg('As senhas digitadas não coincidem.');
-      return;
-    }
-
-    setLoading(true);
-    const { error } = await supabase.auth.signUp({
-      email,
-      password
-    });
-
-    if (error) {
-      setErrorMsg(error.message);
-      setLoading(false);
-    } else {
-      setRegistrationSuccess(true);
-      setLoading(false);
-    }
-  };
-
-  const handleResendConfirm = async () => {
-    if (resendCooldown) return;
-    setLoading(true);
-    const { error } = await supabase.auth.resend({
-      type: 'signup',
-      email: email,
-    });
-    setLoading(false);
-
-    if (error) {
-      setErrorMsg(error.message);
-    } else {
-      setResendCooldown(true);
-      alert('E-mail de confirmação reenviado para ' + email);
-      setTimeout(() => setResendCooldown(false), 30000); // 30s cooldown
-    }
-  };
-
-  const toggleMode = (loginMode: boolean) => {
-    setIsLogin(loginMode);
-    clearErrors();
-    setRegistrationSuccess(false);
-  };
-
+export default function LandingPage() {
   return (
-    <div className="min-h-screen bg-background flex flex-col items-center justify-center font-sans p-4 relative overflow-hidden">
-      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[800px] bg-accent/5 rounded-full blur-[120px] pointer-events-none" />
+    <div className="min-h-screen bg-[#070b14] text-slate-200 font-sans selection:bg-blue-600/30">
+      {/* Network Background Pattern */}
+      <div className="fixed inset-0 z-0 pointer-events-none overflow-hidden flex justify-center items-center opacity-30 mix-blend-screen">
+        <div className="w-[120vw] h-[120vh] bg-[radial-gradient(ellipse_at_center,rgba(29,78,216,0.15),transparent_60%)] absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2" />
+        <svg className="absolute w-full h-full stroke-blue-500/10" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <pattern id="net" width="100" height="100" patternUnits="userSpaceOnUse">
+              <path d="M100 0L0 100M0 0l100 100" strokeWidth="0.5" fill="none" />
+            </pattern>
+          </defs>
+          <rect width="100%" height="100%" fill="url(#net)" />
+        </svg>
+      </div>
 
-      <div className="w-full max-w-md bg-panel border border-border/80 rounded-3xl shadow-2xl relative z-10 overflow-hidden">
-        <div className="p-8 sm:p-10">
-          
-          <div className="flex flex-col items-center mb-8">
-            <div className="w-16 h-16 bg-background border border-accent/20 rounded-2xl flex items-center justify-center mb-6 shadow-inner shadow-accent/10 transition-colors">
-              {registrationSuccess ? (
-                <CheckCircle className="w-8 h-8 text-green-500" />
-              ) : isLogin ? (
-                <LogIn className="w-8 h-8 text-accent" />
-              ) : (
-                <UserPlus className="w-8 h-8 text-accent" />
-              )}
-            </div>
-            <h2 className="text-3xl font-serif font-bold text-foreground text-center">
-              {registrationSuccess ? 'Conta Criada!' : isLogin ? 'Bem-vindo de volta' : 'Crie sua conta'}
-            </h2>
-            <p className="text-foreground/50 text-sm mt-2 text-center">
-              {registrationSuccess 
-                ? 'Enviamos o link de ativação para você.' 
-                : isLogin 
-                  ? 'Insira suas credenciais para acessar o simulador.' 
-                  : 'Junte-se à plataforma número 1 de treinamento B2B.'}
-            </p>
+      {/* Header */}
+      <header className="relative z-50 bg-[#070b14]/80 backdrop-blur-xl border-b border-white/5">
+        <div className="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between">
+          <div className="flex items-center">
+            <Link href="/" className="flex items-center gap-2">
+              <Image src="/SIMULICOLD_LOGO.png" alt="Simulicold" width={360} height={80} className="h-16 w-auto object-contain" priority />
+            </Link>
           </div>
-
-          {/* Banner de Erro Global */}
-          {errorMsg && !registrationSuccess && (
-            <div className="mb-6 p-4 bg-red-500/10 border border-red-500/50 rounded-xl flex items-start gap-3">
-              <AlertCircle className="w-5 h-5 text-red-500 shrink-0 mt-0.5" />
-              <p className="text-sm font-medium text-red-500">{errorMsg}</p>
-            </div>
-          )}
-
-          <div className="relative">
-            {/* ESTADO DE SUCESSO (CADASTRO CONCLUIDO) */}
-            {registrationSuccess ? (
-              <div className="flex flex-col items-center gap-6 animate-in fade-in zoom-in-95 duration-500 text-center">
-                <div className="bg-green-500/10 p-5 rounded-2xl border border-green-500/20 w-full mb-2">
-                  <p className="text-sm text-green-500 font-medium">E-mail de confirmação enviado para:<br/><strong className="text-foreground">{email}</strong></p>
-                </div>
-                
-                <p className="text-sm text-foreground/60 leading-relaxed px-4">
-                  Por favor, verifique sua caixa de entrada ou aba de spam e clique no link para ativar sua conta.
-                </p>
-
-                <div className="flex flex-col gap-3 w-full mt-4">
-                  <button 
-                    onClick={handleResendConfirm}
-                    disabled={loading || resendCooldown}
-                    className="w-full bg-background border border-border hover:border-foreground/20 text-foreground py-3.5 rounded-xl font-bold transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
-                    {resendCooldown ? 'Aguarde para reenviar...' : 'Reenviar E-mail'}
-                  </button>
-                  <button 
-                    onClick={() => toggleMode(true)}
-                    className="w-full text-foreground/50 hover:text-foreground text-sm font-semibold transition-colors mt-2"
-                  >
-                    Voltar para o Login
-                  </button>
-                </div>
-              </div>
-            ) : (
-              <>
-                {/* FORMULÁRIO DE LOGIN */}
-                <form 
-                  onSubmit={handleLogin}
-                  className={`flex flex-col gap-5 transition-all duration-500 ease-in-out ${
-                    isLogin ? 'opacity-100 translate-x-0 relative' : 'opacity-0 absolute inset-0 pointer-events-none -translate-x-10'
-                  }`}
-                >
-                  <div className="space-y-4">
-                    <div>
-                      <label className="text-xs font-bold uppercase tracking-wider text-foreground/70 mb-2 block ml-1">E-mail</label>
-                      <div className="relative">
-                        <Mail className="w-5 h-5 absolute left-4 top-1/2 -translate-y-1/2 text-foreground/40" />
-                        <input 
-                          type="email" 
-                          placeholder="seu@email.com"
-                          value={email}
-                          onChange={(e) => setEmail(e.target.value)}
-                          className="w-full bg-background border border-border/60 text-foreground text-sm rounded-xl py-3.5 pl-12 pr-4 focus:outline-none focus:border-accent/50 focus:ring-1 focus:ring-accent/50 transition-all placeholder:text-foreground/30 autofill:shadow-[inset_0_0_0_1000px_var(--background)] autofill:[-webkit-text-fill-color:var(--foreground)]"
-                          required
-                        />
-                      </div>
-                    </div>
-
-                    <div>
-                      <label className="text-xs font-bold uppercase tracking-wider text-foreground/70 mb-2 block ml-1">Senha</label>
-                      <div className="relative">
-                        <Lock className="w-5 h-5 absolute left-4 top-1/2 -translate-y-1/2 text-foreground/40" />
-                        <input 
-                          type={showPassword ? 'text' : 'password'} 
-                          placeholder="••••••••"
-                          value={password}
-                          onChange={(e) => setPassword(e.target.value)}
-                          className="w-full bg-background border border-border/60 text-foreground text-sm rounded-xl py-3.5 pl-12 pr-12 focus:outline-none focus:border-accent/50 focus:ring-1 focus:ring-accent/50 transition-all placeholder:text-foreground/30 autofill:shadow-[inset_0_0_0_1000px_var(--background)] autofill:[-webkit-text-fill-color:var(--foreground)]"
-                          required
-                        />
-                        <button 
-                          type="button" 
-                          onClick={() => setShowPassword(!showPassword)}
-                          className="absolute right-4 top-1/2 -translate-y-1/2 text-foreground/40 hover:text-foreground transition-colors cursor-pointer"
-                        >
-                          {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                        </button>
-                      </div>
-                      <div className="flex justify-end mt-2">
-                        <button type="button" className="text-xs text-accent/80 hover:text-accent font-semibold transition-colors cursor-pointer">
-                          Esqueci minha senha
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-
-                  <button 
-                    type="submit"
-                    disabled={loading}
-                    className="w-full bg-primary hover:bg-primary-hover text-white py-3.5 rounded-xl font-bold transition-transform hover:-translate-y-0.5 active:translate-y-0 shadow-lg shadow-primary/20 flex items-center justify-center gap-2 mt-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {loading ? 'Processando...' : 'Entrar'}
-                    {!loading && <ArrowRight className="w-4 h-4" />}
-                  </button>
-                </form>
-
-                {/* FORMULÁRIO DE CADASTRO */}
-                <form 
-                  onSubmit={handleRegister}
-                  className={`flex flex-col gap-5 transition-all duration-500 ease-in-out ${
-                    !isLogin ? 'opacity-100 translate-x-0 relative' : 'opacity-0 absolute inset-0 pointer-events-none translate-x-10'
-                  }`}
-                >
-                  <div className="space-y-4">
-                    <div>
-                      <label className="text-xs font-bold uppercase tracking-wider text-foreground/70 mb-2 block ml-1">E-mail</label>
-                      <div className="relative">
-                        <Mail className="w-5 h-5 absolute left-4 top-1/2 -translate-y-1/2 text-foreground/40" />
-                        <input 
-                          type="email" 
-                          placeholder="seu@email.com"
-                          value={email}
-                          onChange={(e) => setEmail(e.target.value)}
-                          className="w-full bg-background border border-border/60 text-foreground text-sm rounded-xl py-3.5 pl-12 pr-4 focus:outline-none focus:border-accent/50 focus:ring-1 focus:ring-accent/50 transition-all placeholder:text-foreground/30 autofill:shadow-[inset_0_0_0_1000px_var(--background)] autofill:[-webkit-text-fill-color:var(--foreground)]"
-                          required
-                        />
-                      </div>
-                    </div>
-
-                    <div>
-                      <label className="text-xs font-bold uppercase tracking-wider text-foreground/70 mb-2 block ml-1">Senha</label>
-                      <div className="relative">
-                        <Lock className="w-5 h-5 absolute left-4 top-1/2 -translate-y-1/2 text-foreground/40" />
-                        <input 
-                          type={showPassword ? 'text' : 'password'} 
-                          placeholder="Mínimo de 8 caracteres"
-                          value={password}
-                          onChange={(e) => setPassword(e.target.value)}
-                          className="w-full bg-background border border-border/60 text-foreground text-sm rounded-xl py-3.5 pl-12 pr-12 focus:outline-none focus:border-accent/50 focus:ring-1 focus:ring-accent/50 transition-all placeholder:text-foreground/30 autofill:shadow-[inset_0_0_0_1000px_var(--background)] autofill:[-webkit-text-fill-color:var(--foreground)]"
-                          required
-                          minLength={8}
-                        />
-                        <button 
-                          type="button" 
-                          onClick={() => setShowPassword(!showPassword)}
-                          className="absolute right-4 top-1/2 -translate-y-1/2 text-foreground/40 hover:text-foreground transition-colors cursor-pointer"
-                        >
-                          {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                        </button>
-                      </div>
-                    </div>
-
-                    <div>
-                      <label className="text-xs font-bold uppercase tracking-wider text-foreground/70 mb-2 block ml-1">Confirme a Senha</label>
-                      <div className="relative">
-                        <Lock className="w-5 h-5 absolute left-4 top-1/2 -translate-y-1/2 text-foreground/40" />
-                        <input 
-                          type={showConfirmPassword ? 'text' : 'password'} 
-                          placeholder="Repita sua senha"
-                          value={confirmPassword}
-                          onChange={(e) => setConfirmPassword(e.target.value)}
-                          className="w-full bg-background border border-border/60 text-foreground text-sm rounded-xl py-3.5 pl-12 pr-12 focus:outline-none focus:border-accent/50 focus:ring-1 focus:ring-accent/50 transition-all placeholder:text-foreground/30 autofill:shadow-[inset_0_0_0_1000px_var(--background)] autofill:[-webkit-text-fill-color:var(--foreground)]"
-                          required
-                        />
-                        <button 
-                          type="button" 
-                          onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                          className="absolute right-4 top-1/2 -translate-y-1/2 text-foreground/40 hover:text-foreground transition-colors cursor-pointer"
-                        >
-                          {showConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-
-                  <button 
-                    type="submit"
-                    disabled={loading}
-                    className="w-full bg-accent hover:bg-yellow-400 text-zinc-950 py-3.5 rounded-xl font-bold transition-transform hover:-translate-y-0.5 active:translate-y-0 shadow-lg shadow-accent/20 flex items-center justify-center gap-2 mt-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {loading ? 'Processando...' : 'Criar Conta'}
-                    {!loading && <UserPlus className="w-4 h-4" />}
-                  </button>
-                </form>
-              </>
-            )}
+          
+          <div className="flex items-center gap-4">
+            <Link 
+              href="/login" 
+              className="px-6 py-2 border border-slate-700 hover:border-blue-500 text-sm font-medium text-white hover:text-blue-400 rounded-lg transition-all"
+            >
+              Entrar
+            </Link>
+            <Link 
+              href="/login?register=true" 
+              className="hidden md:flex px-6 py-2 bg-blue-600 hover:bg-blue-500 text-sm font-medium text-white rounded-lg transition-all shadow-[0_0_15px_rgba(37,99,235,0.3)] hover:shadow-[0_0_25px_rgba(37,99,235,0.5)]"
+            >
+              Cadastrar
+            </Link>
           </div>
         </div>
+      </header>
 
-        {/* Rodapé Alternador do Modal - Some quando o cadastro da certo */}
-        {!registrationSuccess && (
-          <div className="bg-background border-t border-border/50 p-6 flex justify-center">
-            {isLogin ? (
-              <p className="text-sm text-foreground/60">
-                Ainda não tem conta?{' '}
-                <button 
-                  onClick={() => toggleMode(false)}
-                  disabled={loading}
-                  className="text-accent font-bold hover:underline underline-offset-4 pointer-events-auto cursor-pointer"
-                >
-                  Cadastre-se aqui
-                </button>
+      <main className="relative z-10 flex flex-col items-center">
+        {/* Hero Section */}
+        <section className="pt-24 pb-20 px-6 w-full max-w-5xl mx-auto text-center flex flex-col items-center">
+          <h1 className="text-4xl md:text-6xl font-extrabold tracking-tight mb-6 leading-tight text-white">
+            Treine Cold Calls com IA.<br/>
+            <span className="text-blue-500">Receba Feedbacks Instantâneos.</span>
+          </h1>
+          
+          <p className="text-lg md:text-xl text-slate-400 mb-10 max-w-2xl leading-relaxed">
+            Domine Tom de Voz, Linguagem e Script.<br/>
+            Escale sua Equipe com Dados.
+          </p>
+          
+          <Link 
+            href="/login" 
+            className="px-8 py-4 bg-blue-600 hover:bg-blue-500 text-white text-base font-semibold rounded-lg transition-all shadow-[0_0_20px_rgba(37,99,235,0.3)] hover:shadow-[0_0_30px_rgba(37,99,235,0.5)] mb-20"
+          >
+            Começar Agora
+          </Link>
+
+          {/* Features Grid (Inside Hero Area as per reference) */}
+          <div id="funcionalidades" className="grid md:grid-cols-2 gap-4 w-full text-left">
+            {/* Feature 1 */}
+            <div className="bg-[#0f1523]/80 backdrop-blur-sm border border-blue-900/30 rounded-xl p-8 hover:border-blue-700/50 transition-colors">
+              <Mic className="w-8 h-8 text-blue-500 mb-4" />
+              <h3 className="text-lg font-bold text-white mb-2">Análise de Tom de Voz</h3>
+              <p className="text-slate-400 text-sm leading-relaxed">
+                Treine Cold Calls com IA e receba feedbacks da análise de entonação e ritmo da voz.
               </p>
-            ) : (
-              <p className="text-sm text-foreground/60">
-                Já possui uma conta?{' '}
-                <button 
-                  onClick={() => toggleMode(true)}
-                  disabled={loading}
-                  className="text-primary hover:text-primary-hover font-bold hover:underline underline-offset-4 pointer-events-auto cursor-pointer"
-                >
-                  Faça login
-                </button>
+            </div>
+
+            {/* Feature 2 */}
+            <div className="bg-[#0f1523]/80 backdrop-blur-sm border border-blue-900/30 rounded-xl p-8 hover:border-blue-700/50 transition-colors">
+              <FileText className="w-8 h-8 text-blue-500 mb-4" />
+              <h3 className="text-lg font-bold text-white mb-2">Roteiros Dinâmicos</h3>
+              <p className="text-slate-400 text-sm leading-relaxed">
+                Domine o script ideal para cada cenário. Ferramentas integradas para guiar seu discurso.
               </p>
-            )}
+            </div>
+
+            {/* Feature 3 */}
+            <div className="bg-[#0f1523]/80 backdrop-blur-sm border border-blue-900/30 rounded-xl p-8 hover:border-blue-700/50 transition-colors">
+              <Users className="w-8 h-8 text-blue-500 mb-4" />
+              <h3 className="text-lg font-bold text-white mb-2">Personas Customizáveis</h3>
+              <p className="text-slate-400 text-sm leading-relaxed">
+                Configure perfis de clientes específicos. Adapte os treinamentos à sua base ideal.
+              </p>
+            </div>
+
+            {/* Feature 4 */}
+            <div className="bg-[#0f1523]/80 backdrop-blur-sm border border-blue-900/30 rounded-xl p-8 hover:border-blue-700/50 transition-colors">
+              <History className="w-8 h-8 text-blue-500 mb-4" />
+              <h3 className="text-lg font-bold text-white mb-2">Histórico de Evolução</h3>
+              <p className="text-slate-400 text-sm leading-relaxed">
+                Evolua seu time de vendas com gráficos precisos de resultados de cada consultor acompanhando seu desenvolvimento.
+              </p>
+            </div>
           </div>
-        )}
-      </div>
+        </section>
+
+        {/* Como Funciona Section */}
+        <section id="como-funciona" className="py-32 px-6 w-full max-w-6xl mx-auto border-t border-white/5">
+          <div className="text-center mb-24">
+            <span className="text-blue-500 font-bold tracking-widest text-sm uppercase mb-3 block">SIMPLES ASSIM</span>
+            <h2 className="text-5xl md:text-6xl font-extrabold text-white tracking-tight">
+              Como funciona
+            </h2>
+          </div>
+
+          <div className="flex flex-col md:flex-row justify-between items-start gap-16 md:gap-10 relative max-w-5xl mx-auto">
+            {/* Dotted Connecting Line (desktop only) */}
+            <div className="hidden md:block absolute top-[3.5rem] left-[15%] right-[15%] h-[4px] border-t-[4px] border-dashed border-blue-500/50 z-0 pointer-events-none"></div>
+
+            {/* Step 1 */}
+            <div className="flex flex-col items-center text-center flex-1 relative z-10 w-full group">
+              <div className="w-28 h-28 bg-blue-600 rounded-[2rem] flex items-center justify-center text-white font-black text-4xl mb-10 relative shadow-[0_0_40px_rgba(37,99,235,0.4)] group-hover:scale-105 transition-transform duration-300">
+                1
+                <div className="absolute -top-4 -right-4 text-4xl drop-shadow-xl bg-[#0f1523] rounded-full p-2 border border-white/5">💬</div>
+              </div>
+              <h3 className="text-2xl font-bold text-white mb-4">Defina o cenário</h3>
+              <p className="text-slate-400 text-base leading-relaxed max-w-[280px]">
+                Adicione as informações do seu produto, lead e principais objeções com apenas alguns cliques.
+              </p>
+            </div>
+
+            {/* Step 2 */}
+            <div className="flex flex-col items-center text-center flex-1 relative z-10 w-full group">
+              <div className="w-28 h-28 bg-blue-600 rounded-[2rem] flex items-center justify-center text-white font-black text-4xl mb-10 relative shadow-[0_0_40px_rgba(37,99,235,0.4)] group-hover:scale-105 transition-transform duration-300">
+                2
+                <div className="absolute -top-4 -right-4 text-4xl drop-shadow-xl bg-[#0f1523] rounded-full p-2 border border-white/5">🤖</div>
+              </div>
+              <h3 className="text-2xl font-bold text-white mb-4">IA simula o cliente</h3>
+              <p className="text-slate-400 text-base leading-relaxed max-w-[280px]">
+                Nossa IA atua como um prospect realista em uma chamada de voz dinâmica e interativa.
+              </p>
+            </div>
+
+            {/* Step 3 */}
+            <div className="flex flex-col items-center text-center flex-1 relative z-10 w-full group">
+              <div className="w-28 h-28 bg-blue-600 rounded-[2rem] flex items-center justify-center text-white font-black text-4xl mb-10 relative shadow-[0_0_40px_rgba(37,99,235,0.4)] group-hover:scale-105 transition-transform duration-300">
+                3
+                <div className="absolute -top-4 -right-4 text-4xl drop-shadow-xl bg-[#0f1523] rounded-full p-2 border border-white/5">📈</div>
+              </div>
+              <h3 className="text-2xl font-bold text-white mb-4">Feedback detalhado</h3>
+              <p className="text-slate-400 text-base leading-relaxed max-w-[280px]">
+                A análise é gerada e apresentada automaticamente com pontuações e dicas de melhoria.
+              </p>
+            </div>
+          </div>
+        </section>
+
+        {/* Pricing Section */}
+        <section id="preco" className="py-24 px-6 w-full max-w-6xl mx-auto border-t border-white/5">
+          <div className="text-center mb-16">
+            <h2 className="text-3xl md:text-4xl font-bold mb-4 text-white">
+              Acesso Total. Preço Único,<br/>Pagamento Flexível.
+            </h2>
+          </div>
+
+          <div className="grid md:grid-cols-3 gap-6 max-w-5xl mx-auto items-stretch">
+            {/* Semestral */}
+            <div className="bg-[#0f1523] border border-blue-900/30 rounded-2xl p-8 flex flex-col text-center hover:border-blue-700/50 transition-colors">
+              <div className="w-12 h-12 bg-blue-900/20 rounded-full flex items-center justify-center mx-auto mb-6 text-blue-400">
+                <FileText className="w-5 h-5" />
+              </div>
+              <h3 className="text-xl font-bold text-white mb-2">Semestral</h3>
+              <div className="text-blue-400 font-semibold mb-6">(R$ 335)</div>
+              <p className="text-slate-400 text-sm mb-8 flex-1">
+                Acesso completo por 6 meses. Ideal para equipes escalando suas operações com máxima eficiência no pagamento a termo.
+              </p>
+              <Link 
+                href="/login?register=true&plan=semestral"
+                className="w-full py-3 bg-blue-600 hover:bg-blue-500 text-white font-medium rounded-lg transition-colors"
+              >
+                Assinar Semestre
+              </Link>
+            </div>
+
+            {/* Trimestral */}
+            <div className="bg-[#131b2c] border border-blue-600/50 rounded-2xl p-8 flex flex-col text-center relative shadow-[0_0_30px_rgba(37,99,235,0.1)]">
+              <div className="w-12 h-12 bg-blue-900/40 rounded-full flex items-center justify-center mx-auto mb-6 text-blue-400">
+                <FileText className="w-5 h-5" />
+              </div>
+              <h3 className="text-xl font-bold text-white mb-2">Trimestral</h3>
+              <div className="text-blue-400 font-semibold mb-6">(R$ 170)</div>
+              <p className="text-slate-400 text-sm mb-8 flex-1">
+                Acesso total por 3 meses. Compromisso balanceado garantindo evolução contínua.
+              </p>
+              <Link 
+                href="/login?register=true&plan=trimestral"
+                className="w-full py-3 bg-blue-600 hover:bg-blue-500 text-white font-medium rounded-lg transition-colors"
+              >
+                Assinar Trimestre
+              </Link>
+            </div>
+
+            {/* Mensal */}
+            <div className="bg-[#0f1523] border border-blue-900/30 rounded-2xl p-8 flex flex-col text-center hover:border-blue-700/50 transition-colors">
+              <div className="w-12 h-12 bg-blue-900/20 rounded-full flex items-center justify-center mx-auto mb-6 text-blue-400">
+                <FileText className="w-5 h-5" />
+              </div>
+              <h3 className="text-xl font-bold text-white mb-2">Mensal</h3>
+              <div className="text-blue-400 font-semibold mb-6">(R$ 60)</div>
+              <p className="text-slate-400 text-sm mb-8 flex-1">
+                Renovação mensal garantindo flexibilidade para quem quer testar e provar o valor.
+              </p>
+              <Link 
+                href="/login?register=true&plan=mensal"
+                className="w-full py-3 bg-blue-600 hover:bg-blue-500 text-white font-medium rounded-lg transition-colors"
+              >
+                Assinar Mês
+              </Link>
+            </div>
+          </div>
+        </section>
+      </main>
+
+      {/* Footer */}
+      <footer id="sobre" className="relative z-10 bg-[#04070c] border-t border-white/5 py-12">
+        <div className="max-w-7xl mx-auto px-6 grid md:grid-cols-3 gap-8 items-center text-sm">
+          {/* Logo Simulicold */}
+          <div className="flex flex-col items-center md:items-start gap-2">
+            <Image src="/SIMULICOLD_LOGO.png" alt="Simulicold" width={320} height={72} className="h-14 md:h-16 w-auto object-contain opacity-90" />
+          </div>
+          
+          <div className="flex flex-col items-center gap-2 text-center">
+            <span className="text-slate-500">
+              Simulicold é uma ferramenta de treinamento de vendas com IA desenvolvida pela CONSELT Empresa Júnior.
+            </span>
+            <span className="text-slate-600 text-xs text-center">
+              © 2026 SIMULICOLD. Todos os direitos reservados.
+            </span>
+          </div>
+          
+          <div className="flex flex-col items-center md:items-end gap-3">
+             <a href="https://www.conselt.com.br" target="_blank" rel="noreferrer" className="group flex flex-col items-center md:items-end gap-1 opacity-80 hover:opacity-100 transition-opacity">
+               <Image src="/CONSELT_LOGO.png" alt="CONSELT" width={320} height={90} className="h-20 md:h-28 w-auto object-contain" />
+             </a>
+          </div>
+        </div>
+      </footer>
     </div>
   );
 }

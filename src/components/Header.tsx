@@ -37,11 +37,10 @@ export function Header() {
 
   return (
     <header className="flex items-center justify-between p-4 px-6 border-b border-border/50 bg-background relative z-50">
-      <div className="flex items-center gap-2">
-        <div className="bg-primary/20 p-2 rounded-lg">
-          <PhoneForwarded className="w-6 h-6 text-primary" />
-        </div>
-        <h1 className="text-xl font-bold tracking-wider text-foreground">SIMULADOR B2B</h1>
+      <div className="flex items-center gap-2 hover:opacity-80 transition-opacity">
+        <Link href="/">
+          <img src="/SIMULICOLD_LOGO.png" alt="Simulicold" className="h-14 sm:h-16 w-auto object-contain block" />
+        </Link>
       </div>
 
       <div className="flex items-center gap-6 text-sm text-foreground/80">
