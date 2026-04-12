@@ -42,6 +42,28 @@ export default function AuthPage() {
       setErrorMsg(error.message);
       setLoading(false);
     } else {
+      const urlParams = new URLSearchParams(window.location.search);
+      const planFromUrl = urlParams.get('plan');
+
+      if (planFromUrl) {
+        try {
+          const response = await fetch('/api/checkout', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({ planType: planFromUrl }),
+          });
+          const result = await response.json();
+          
+          if (response.ok && result.init_point) {
+            window.location.href = result.init_point;
+            return;
+          }
+        } catch(e) {
+          console.error('[Login] Erro ao direcionar para checkout:', e);
+        }
+      }
+
       router.push('/dashboard');
     }
   };
@@ -57,9 +79,23 @@ export default function AuthPage() {
     }
 
     setLoading(true);
+
+    const urlParams = new URLSearchParams(window.location.search);
+    const planFromUrl = urlParams.get('plan');
+
+    const redirectUrl = new URL(`${window.location.origin}/auth/callback`);
+    if (planFromUrl) {
+      redirectUrl.searchParams.set('next', `/processing-payment?plan=${planFromUrl}`);
+    } else {
+      redirectUrl.searchParams.set('next', `/dashboard`);
+    }
+
     const { error } = await supabase.auth.signUp({
       email,
-      password
+      password,
+      options: {
+        emailRedirectTo: redirectUrl.toString()
+      }
     });
 
     if (error) {
