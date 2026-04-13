@@ -111,7 +111,7 @@ export async function POST(request: NextRequest) {
           transaction_amount: plan.price,
           currency_id: 'BRL',
         },
-        back_url: `${siteUrl}/dashboard?status=check`,
+        back_url: `${siteUrl}/payment-status`,
         // external_reference mapeia o user_id do Supabase para o webhook
         external_reference: checkoutUser.id,
         payer_email: checkoutUser.email,

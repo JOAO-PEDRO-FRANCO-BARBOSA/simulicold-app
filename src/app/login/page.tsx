@@ -129,15 +129,13 @@ function AuthContent() {
       // Sem assinatura válida — verificar se tem plano na URL
       const planFromUrl = searchParams.get('plan');
       if (planFromUrl) {
-        const checkout = await redirectToCheckoutWithRetry(planFromUrl);
-        if (checkout.redirected) return;
-        setErrorMsg(checkout.errorMessage || 'Erro ao autenticar sessão para pagamento. Atualize a página e tente novamente.');
-        setLoading(false);
+        // Tem plano → redirecionar para processing-payment com o plano
+        router.push(`/processing-payment?plan=${encodeURIComponent(planFromUrl)}`);
         return;
       }
 
-      // Sem plano na URL — mandar para a rota pública de assinatura
-      router.push('/checkout');
+      // Sem plano na URL — mandar para a seção de preços
+      router.push('/#preco');
     };
 
     checkExistingSession();
@@ -151,8 +149,8 @@ function AuthContent() {
   //   1. signInWithPassword
   //   2. Consultar tabela `subscriptions`
   //   3. Se VÁLIDA → /dashboard (ignora ?plan= na URL)
-  //   4. Se INVÁLIDA + ?plan= → /api/checkout → Mercado Pago
-  //   5. Se INVÁLIDA sem plano → /#preco
+  //   4. Se INVÁLIDA + ?plan= → /processing-payment?plan= → /api/checkout → Mercado Pago
+  //   5. Se INVÁLIDA sem plano → /#preco (seção de preços na home)
   // ─────────────────────────────────────────────────────────────────────────────
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -194,19 +192,13 @@ function AuthContent() {
     const planFromUrl = searchParams.get('plan');
 
     if (planFromUrl) {
-      // Tem plano na URL → Chamar checkout e redirecionar pro Mercado Pago
-      const checkout = await redirectToCheckoutWithRetry(planFromUrl);
-      if (!checkout.redirected) {
-        // Fallback se checkout falhar
-        setErrorMsg(checkout.errorMessage || 'Erro ao autenticar sessão para pagamento. Tente novamente em alguns segundos.');
-        setLoading(false);
-        return;
-      }
+      // Tem plano na URL → Redirecionar para processing-payment com o plano
+      router.push(`/processing-payment?plan=${encodeURIComponent(planFromUrl)}`);
       return;
     }
 
-    // Sem plano na URL → Página pública de assinatura
-    router.push('/checkout');
+    // Sem plano na URL → Seção de preços
+    router.push('/#preco');
   };
 
   // ─────────────────────────────────────────────────────────────────────────────
