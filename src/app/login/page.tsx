@@ -1,17 +1,16 @@
 'use client';
 
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useState, useEffect, Suspense } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { Mail, Lock, ArrowRight, UserPlus, LogIn, AlertCircle, CheckCircle, RefreshCw, Eye, EyeOff, Loader2 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 
-export default function AuthPage() {
+function AuthContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  
   const [isLogin, setIsLogin] = useState(() => {
-    if (typeof window !== 'undefined') {
-      return !window.location.search.includes('register=true');
-    }
-    return true;
+    return !searchParams.has('register');
   });
 
   // States
@@ -27,48 +26,186 @@ export default function AuthPage() {
 
   const clearErrors = () => setErrorMsg('');
 
-  // Handler Real do Login via Auth
+  // ─────────────────────────────────────────────────────────────────────────────
+  // HELPERS
+  // ─────────────────────────────────────────────────────────────────────────────
+
+  /**
+   * Verifica se o usuário possui uma assinatura ativa e dentro do período.
+   * Retorna `true` se o acesso deve ser liberado para o dashboard.
+   */
+  const checkSubscription = async (userId: string): Promise<boolean> => {
+    const { data: subscription } = await supabase
+      .from('subscriptions')
+      .select('status, current_period_end')
+      .eq('user_id', userId)
+      .maybeSingle();
+
+    if (!subscription) return false;
+
+    const isAuthorized = subscription.status === 'authorized' || subscription.status === 'active';
+    const isValidPeriod = subscription.current_period_end
+      ? new Date(subscription.current_period_end) > new Date()
+      : false;
+
+    return isAuthorized && isValidPeriod;
+  };
+
+  /**
+   * Chama /api/checkout com o plano selecionado e redireciona para o
+   * init_point do Mercado Pago. Retorna `false` se falhar.
+   */
+  const redirectToCheckout = async (plan: string): Promise<boolean> => {
+    try {
+      const response = await fetch('/api/checkout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ planType: plan }),
+      });
+
+      const result = await response.json();
+
+      if (response.ok && result.init_point) {
+        window.location.href = result.init_point;
+        return true;
+      } else {
+        throw new Error(result.error || 'Falha ao gerar cobrança.');
+      }
+    } catch (err) {
+      console.error('[LOGIN] Erro no checkout inline:', err);
+      return false;
+    }
+  };
+
+  // ─────────────────────────────────────────────────────────────────────────────
+  // EFEITO: Se o usuário já está autenticado (ex: voltou ao /login por um link),
+  // verificar assinatura e redirecionar sem exigir novo login.
+  // ─────────────────────────────────────────────────────────────────────────────
+  useEffect(() => {
+    const checkExistingSession = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return; // Não logado — exibir formulário normalmente
+
+      setLoading(true);
+
+      const hasValidSub = await checkSubscription(user.id);
+
+      if (hasValidSub) {
+        window.location.href = '/dashboard';
+        return;
+      }
+
+      // Sem assinatura válida — verificar se tem plano na URL
+      const planFromUrl = searchParams.get('plan');
+      if (planFromUrl) {
+        const redirected = await redirectToCheckout(planFromUrl);
+        if (redirected) return;
+      }
+
+      // Sem plano na URL — mandar para escolha de planos
+      window.location.href = '/#preco';
+    };
+
+    checkExistingSession();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // ─────────────────────────────────────────────────────────────────────────────
+  // HANDLER: LOGIN
+  // ─────────────────────────────────────────────────────────────────────────────
+  // Fluxo pós-login:
+  //   1. signInWithPassword
+  //   2. Consultar tabela `subscriptions`
+  //   3. Se VÁLIDA → /dashboard (ignora ?plan= na URL)
+  //   4. Se INVÁLIDA + ?plan= → /api/checkout → Mercado Pago
+  //   5. Se INVÁLIDA sem plano → /#preco
+  // ─────────────────────────────────────────────────────────────────────────────
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     clearErrors();
     setLoading(true);
 
+    // Passo 1: Autenticar
     const { error } = await supabase.auth.signInWithPassword({
       email,
-      password
+      password,
     });
 
     if (error) {
       setErrorMsg(error.message);
       setLoading(false);
-    } else {
-      const urlParams = new URLSearchParams(window.location.search);
-      const planFromUrl = urlParams.get('plan');
-
-      if (planFromUrl) {
-        try {
-          const response = await fetch('/api/checkout', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            credentials: 'include',
-            body: JSON.stringify({ planType: planFromUrl }),
-          });
-          const result = await response.json();
-          
-          if (response.ok && result.init_point) {
-            window.location.href = result.init_point;
-            return;
-          }
-        } catch(e) {
-          console.error('[Login] Erro ao direcionar para checkout:', e);
-        }
-      }
-
-      router.push('/dashboard');
+      return;
     }
+
+    // Passo 2: Obter dados do usuário
+    const { data: { user } } = await supabase.auth.getUser();
+
+    if (!user) {
+      // Fallback improvável — login ok mas getUser falhou
+      setErrorMsg('Erro ao recuperar dados do usuário.');
+      setLoading(false);
+      return;
+    }
+
+    // Passo A: Checar assinatura
+    const hasValidSubscription = await checkSubscription(user.id);
+
+    // Passo B: Se VÁLIDA → Dashboard (ignora ?plan=)
+    if (hasValidSubscription) {
+      window.location.href = '/dashboard';
+      return;
+    }
+
+    // Passo C: Se INVÁLIDA / INEXISTENTE
+    const planFromUrl = searchParams.get('plan');
+
+    if (planFromUrl) {
+      // Tem plano na URL → Chamar checkout e redirecionar pro Mercado Pago
+      const redirected = await redirectToCheckout(planFromUrl);
+      if (!redirected) {
+        // Fallback se checkout falhar
+        setErrorMsg('Erro ao processar pagamento. Tente novamente.');
+        setLoading(false);
+      }
+      return;
+    }
+
+    // Sem plano na URL → Página de escolha de planos
+    window.location.href = '/#preco';
   };
 
-  // Handler Real do Cadastro vis Auth
+  // ─────────────────────────────────────────────────────────────────────────────
+  // HANDLER: CADASTRO
+  // ─────────────────────────────────────────────────────────────────────────────
+  //
+  // ⚡ DICA DE UX — AUTO-LOGIN PÓS-CADASTRO:
+  //
+  // Se a confirmação de e-mail estiver ATIVADA no Supabase (padrão), o signUp()
+  // não cria uma sessão imediata — o usuário precisa clicar no link de e-mail
+  // antes de poder logar. Isso adiciona fricção ao fluxo de pagamento.
+  //
+  // Para REDUZIR ATRITO no fluxo Cadastro → Pagamento, há duas opções:
+  //
+  // OPÇÃO A (Recomendada para MVP):
+  //   1. No Supabase Dashboard → Authentication → Providers → Email
+  //   2. Desabilitar "Confirm email" (desmarcar a checkbox)
+  //   3. Com isso, signUp() já cria a sessão automaticamente
+  //   4. Neste caso, após signUp() bem-sucedido, você pode chamar
+  //      redirectToCheckout() imediatamente, igual ao handleLogin.
+  //   → O risco é aceitar e-mails falsos. Mitigação: enviar e-mail de
+  //     verificação separado e bloquear funcionalidades após X dias.
+  //
+  // OPÇÃO B (Confirmação ativada — fluxo via e-mail):
+  //   1. Manter signUp() com emailRedirectTo apontando para /auth/callback
+  //   2. O callback troca o code por sessão e redireciona para
+  //      /processing-payment?plan=X (se houver plano) ou /dashboard
+  //   3. O /processing-payment chama /api/checkout automaticamente.
+  //   → Mais seguro, porém o usuário precisa abrir o e-mail antes de pagar.
+  //
+  // A implementação abaixo usa a OPÇÃO B por padrão (sem alterar config do Supabase).
+  // Para trocar para a OPÇÃO A, basta descomentar o bloco de auto-login abaixo.
+  // ─────────────────────────────────────────────────────────────────────────────
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
     clearErrors();
@@ -80,9 +217,9 @@ export default function AuthPage() {
 
     setLoading(true);
 
-    const urlParams = new URLSearchParams(window.location.search);
-    const planFromUrl = urlParams.get('plan');
+    const planFromUrl = searchParams.get('plan');
 
+    // ── OPÇÃO B (padrão): Cadastro com confirmação de e-mail ──────────────
     const redirectUrl = new URL(`${window.location.origin}/auth/callback`);
     if (planFromUrl) {
       redirectUrl.searchParams.set('next', `/processing-payment?plan=${planFromUrl}`);
@@ -94,17 +231,31 @@ export default function AuthPage() {
       email,
       password,
       options: {
-        emailRedirectTo: redirectUrl.toString()
-      }
+        emailRedirectTo: redirectUrl.toString(),
+      },
     });
 
     if (error) {
       setErrorMsg(error.message);
       setLoading(false);
-    } else {
-      setRegistrationSuccess(true);
-      setLoading(false);
+      return;
     }
+
+    // ── OPÇÃO A (descomentar para auto-login sem confirmação de e-mail): ──
+    // Se o Supabase está configurado SEM confirmação de e-mail, podemos
+    // logar imediatamente após o cadastro:
+    //
+    // const { data: { user } } = await supabase.auth.getUser();
+    // if (user && planFromUrl) {
+    //   const redirected = await redirectToCheckout(planFromUrl);
+    //   if (redirected) return;
+    // } else if (user) {
+    //   window.location.href = '/dashboard';
+    //   return;
+    // }
+
+    setRegistrationSuccess(true);
+    setLoading(false);
   };
 
   const handleResendConfirm = async () => {
@@ -381,5 +532,13 @@ export default function AuthPage() {
         />
       </a>
     </div>
+  );
+}
+
+export default function AuthPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-background flex items-center justify-center"><Loader2 className="w-8 h-8 text-blue-500 animate-spin" /></div>}>
+      <AuthContent />
+    </Suspense>
   );
 }
