@@ -35,7 +35,7 @@ export async function GET(request: Request) {
     // Troca do code recebido no link de email por Sessão
     const { error } = await supabase.auth.exchangeCodeForSession(code);
     if (!error) {
-      return NextResponse.redirect(`${origin}${next}`);
+      return NextResponse.redirect(new URL(next || '/dashboard', request.url));
     } else {
       console.error('[AUTH_CALLBACK] Erro trocando token:', error);
     }

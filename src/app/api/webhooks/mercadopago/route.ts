@@ -20,7 +20,7 @@ export async function POST(request: NextRequest) {
 
     // Aceitar tanto IPN (type=preapproval) quanto notificações antigas (id direto)
     if (type !== 'preapproval' && type !== 'subscription_preapproval') {
-      return NextResponse.json({ received: true, skipped: true });
+      return NextResponse.json({ received: true }, { status: 200 });
     }
 
     const preapprovalId = data?.id;
@@ -101,7 +101,7 @@ export async function POST(request: NextRequest) {
     }
 
     console.log(`[WEBHOOK MP] Assinatura ${planType} ativada para user ${userId}`);
-    return NextResponse.json({ received: true, activated: true });
+    return NextResponse.json({ received: true }, { status: 200 });
   } catch (error: unknown) {
     console.error('[WEBHOOK MP] Erro não tratado:', error);
     const message = error instanceof Error ? error.message : 'Erro interno.';

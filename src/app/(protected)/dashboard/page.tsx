@@ -10,7 +10,7 @@ import { SupportPopup } from '@/components/SupportPopup';
 import { EndCallModal } from '@/components/EndCallModal';
 import { supabase } from '@/lib/supabase';
 
-export default function DashboardPage() {
+export default function Dashboard() {
   const [callState, setCallState] = useState<'idle' | 'active' | 'ended'>('idle');
   
   const [selectedPersonaId, setSelectedPersonaId] = useState('');
