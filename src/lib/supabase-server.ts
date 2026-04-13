@@ -1,5 +1,6 @@
 import { createServerClient } from '@supabase/ssr';
 import { cookies } from 'next/headers';
+import type { NextRequest } from 'next/server';
 
 /**
  * Cria um cliente Supabase para uso em Route Handlers (server-side).
@@ -46,4 +47,15 @@ export function createSupabaseAdminClient() {
       },
     }
   );
+}
+
+export function getAuthorizationToken(request: NextRequest): string | null {
+  const authHeader = request.headers.get('authorization');
+  if (!authHeader) return null;
+
+  const [scheme, token] = authHeader.split(' ');
+  if (!scheme || !token) return null;
+  if (scheme.toLowerCase() !== 'bearer') return null;
+
+  return token;
 }

@@ -13,7 +13,7 @@ function ProcessingContent() {
     const plan = searchParams.get('plan');
 
     if (!plan) {
-      window.location.href = '/#preco';
+      window.location.href = '/checkout';
       return;
     }
 
@@ -40,7 +40,7 @@ function ProcessingContent() {
         console.error('[Processing] Erro:', err);
         setErrorMsg('Erro de rede. Voltando aos planos...');
         setTimeout(() => {
-            window.location.href = '/#preco';
+            window.location.href = '/checkout';
         }, 1500);
       }
     };

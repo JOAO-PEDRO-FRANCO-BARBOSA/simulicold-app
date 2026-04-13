@@ -47,7 +47,7 @@ export default async function ProtectedLayout({
   }
 
   if (!subscription || !isAuthorized || !isValidPeriod) {
-    redirect('/#preco');
+    redirect('/checkout');
   }
 
   return <>{children}</>;

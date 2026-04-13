@@ -30,52 +30,82 @@ function AuthContent() {
   // HELPERS
   // ─────────────────────────────────────────────────────────────────────────────
 
-  /**
-   * Verifica se o usuário possui uma assinatura ativa e dentro do período.
-   * Retorna `true` se o acesso deve ser liberado para o dashboard.
-   */
   const checkSubscription = async (userId: string): Promise<boolean> => {
     const { data: subscription } = await supabase
       .from('subscriptions')
-      .select('status, current_period_end')
+      .select('status')
       .eq('user_id', userId)
       .maybeSingle();
 
     if (!subscription) return false;
 
-    const isAuthorized = subscription.status === 'authorized' || subscription.status === 'active';
-    const isValidPeriod = subscription.current_period_end
-      ? new Date(subscription.current_period_end) > new Date()
-      : false;
-
-    return isAuthorized && isValidPeriod;
+    return subscription.status === 'authorized' || subscription.status === 'active';
   };
 
-  /**
-   * Chama /api/checkout com o plano selecionado e redireciona para o
-   * init_point do Mercado Pago. Retorna `false` se falhar.
-   */
-  const redirectToCheckout = async (plan: string): Promise<boolean> => {
+  const redirectToCheckout = async (
+    plan: string,
+    accessToken?: string | null
+  ): Promise<{ redirected: boolean; unauthorized: boolean; errorMessage?: string }> => {
     try {
       const response = await fetch('/api/checkout', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+        },
         credentials: 'include',
         body: JSON.stringify({ planType: plan }),
       });
 
-      const result = await response.json();
+      if (response.status === 401) {
+        return { redirected: false, unauthorized: true };
+      }
+
+      let result: { init_point?: string; error?: string } = {};
+      try {
+        result = await response.json();
+      } catch {
+        // Mantemos objeto vazio para tratar resposta não-JSON sem quebrar o fluxo.
+      }
 
       if (response.ok && result.init_point) {
         window.location.href = result.init_point;
-        return true;
+        return { redirected: true, unauthorized: false };
       } else {
-        throw new Error(result.error || 'Falha ao gerar cobrança.');
+        throw new Error(result.error || `Falha ao gerar cobrança (HTTP ${response.status}).`);
       }
     } catch (err) {
       console.error('[LOGIN] Erro no checkout inline:', err);
-      return false;
+      return {
+        redirected: false,
+        unauthorized: false,
+        errorMessage: err instanceof Error ? err.message : 'Falha ao gerar cobrança.',
+      };
     }
+  };
+
+  const redirectToCheckoutWithRetry = async (
+    plan: string
+  ): Promise<{ redirected: boolean; errorMessage?: string }> => {
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+
+    let checkoutResult = await redirectToCheckout(plan, session?.access_token ?? null);
+
+    if (checkoutResult.redirected) return { redirected: true };
+
+    if (checkoutResult.unauthorized) {
+      const { data: refreshed } = await supabase.auth.refreshSession();
+      const refreshedToken = refreshed.session?.access_token ?? null;
+      checkoutResult = await redirectToCheckout(plan, refreshedToken);
+      if (checkoutResult.redirected) return { redirected: true };
+    }
+
+    return {
+      redirected: false,
+      errorMessage: checkoutResult.errorMessage,
+    };
   };
 
   // ─────────────────────────────────────────────────────────────────────────────
@@ -92,24 +122,27 @@ function AuthContent() {
       const hasValidSub = await checkSubscription(user.id);
 
       if (hasValidSub) {
-        window.location.href = '/dashboard';
+        router.push('/dashboard');
         return;
       }
 
       // Sem assinatura válida — verificar se tem plano na URL
       const planFromUrl = searchParams.get('plan');
       if (planFromUrl) {
-        const redirected = await redirectToCheckout(planFromUrl);
-        if (redirected) return;
+        const checkout = await redirectToCheckoutWithRetry(planFromUrl);
+        if (checkout.redirected) return;
+        setErrorMsg(checkout.errorMessage || 'Erro ao autenticar sessão para pagamento. Atualize a página e tente novamente.');
+        setLoading(false);
+        return;
       }
 
-      // Sem plano na URL — mandar para escolha de planos
-      window.location.href = '/#preco';
+      // Sem plano na URL — mandar para a rota pública de assinatura
+      router.push('/checkout');
     };
 
     checkExistingSession();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [router, searchParams]);
 
   // ─────────────────────────────────────────────────────────────────────────────
   // HANDLER: LOGIN
@@ -151,9 +184,9 @@ function AuthContent() {
     // Passo A: Checar assinatura
     const hasValidSubscription = await checkSubscription(user.id);
 
-    // Passo B: Se VÁLIDA → Dashboard (ignora ?plan=)
+    // Passo B: Se VÁLIDA → Dashboard
     if (hasValidSubscription) {
-      window.location.href = '/dashboard';
+      router.push('/dashboard');
       return;
     }
 
@@ -162,49 +195,22 @@ function AuthContent() {
 
     if (planFromUrl) {
       // Tem plano na URL → Chamar checkout e redirecionar pro Mercado Pago
-      const redirected = await redirectToCheckout(planFromUrl);
-      if (!redirected) {
+      const checkout = await redirectToCheckoutWithRetry(planFromUrl);
+      if (!checkout.redirected) {
         // Fallback se checkout falhar
-        setErrorMsg('Erro ao processar pagamento. Tente novamente.');
+        setErrorMsg(checkout.errorMessage || 'Erro ao autenticar sessão para pagamento. Tente novamente em alguns segundos.');
         setLoading(false);
+        return;
       }
       return;
     }
 
-    // Sem plano na URL → Página de escolha de planos
-    window.location.href = '/#preco';
+    // Sem plano na URL → Página pública de assinatura
+    router.push('/checkout');
   };
 
   // ─────────────────────────────────────────────────────────────────────────────
   // HANDLER: CADASTRO
-  // ─────────────────────────────────────────────────────────────────────────────
-  //
-  // ⚡ DICA DE UX — AUTO-LOGIN PÓS-CADASTRO:
-  //
-  // Se a confirmação de e-mail estiver ATIVADA no Supabase (padrão), o signUp()
-  // não cria uma sessão imediata — o usuário precisa clicar no link de e-mail
-  // antes de poder logar. Isso adiciona fricção ao fluxo de pagamento.
-  //
-  // Para REDUZIR ATRITO no fluxo Cadastro → Pagamento, há duas opções:
-  //
-  // OPÇÃO A (Recomendada para MVP):
-  //   1. No Supabase Dashboard → Authentication → Providers → Email
-  //   2. Desabilitar "Confirm email" (desmarcar a checkbox)
-  //   3. Com isso, signUp() já cria a sessão automaticamente
-  //   4. Neste caso, após signUp() bem-sucedido, você pode chamar
-  //      redirectToCheckout() imediatamente, igual ao handleLogin.
-  //   → O risco é aceitar e-mails falsos. Mitigação: enviar e-mail de
-  //     verificação separado e bloquear funcionalidades após X dias.
-  //
-  // OPÇÃO B (Confirmação ativada — fluxo via e-mail):
-  //   1. Manter signUp() com emailRedirectTo apontando para /auth/callback
-  //   2. O callback troca o code por sessão e redireciona para
-  //      /processing-payment?plan=X (se houver plano) ou /dashboard
-  //   3. O /processing-payment chama /api/checkout automaticamente.
-  //   → Mais seguro, porém o usuário precisa abrir o e-mail antes de pagar.
-  //
-  // A implementação abaixo usa a OPÇÃO B por padrão (sem alterar config do Supabase).
-  // Para trocar para a OPÇÃO A, basta descomentar o bloco de auto-login abaixo.
   // ─────────────────────────────────────────────────────────────────────────────
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -218,14 +224,8 @@ function AuthContent() {
     setLoading(true);
 
     const planFromUrl = searchParams.get('plan');
-
-    // ── OPÇÃO B (padrão): Cadastro com confirmação de e-mail ──────────────
     const redirectUrl = new URL(`${window.location.origin}/auth/callback`);
-    if (planFromUrl) {
-      redirectUrl.searchParams.set('next', `/processing-payment?plan=${planFromUrl}`);
-    } else {
-      redirectUrl.searchParams.set('next', `/dashboard`);
-    }
+    redirectUrl.searchParams.set('next', planFromUrl ? `/login?plan=${planFromUrl}` : '/login');
 
     const { error } = await supabase.auth.signUp({
       email,
@@ -240,19 +240,6 @@ function AuthContent() {
       setLoading(false);
       return;
     }
-
-    // ── OPÇÃO A (descomentar para auto-login sem confirmação de e-mail): ──
-    // Se o Supabase está configurado SEM confirmação de e-mail, podemos
-    // logar imediatamente após o cadastro:
-    //
-    // const { data: { user } } = await supabase.auth.getUser();
-    // if (user && planFromUrl) {
-    //   const redirected = await redirectToCheckout(planFromUrl);
-    //   if (redirected) return;
-    // } else if (user) {
-    //   window.location.href = '/dashboard';
-    //   return;
-    // }
 
     setRegistrationSuccess(true);
     setLoading(false);
