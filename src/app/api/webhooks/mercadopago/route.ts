@@ -20,7 +20,7 @@ export async function POST(request: NextRequest) {
 
     // Aceitar tanto IPN (type=preapproval) quanto notificações antigas (id direto)
     if (type !== 'preapproval' && type !== 'subscription_preapproval') {
-      return NextResponse.json({ received: true }, { status: 200 });
+      return NextResponse.json({ status: 'ignored' }, { status: 200 });
     }
 
     const preapprovalId = data?.id;
@@ -50,17 +50,14 @@ export async function POST(request: NextRequest) {
           })
           .eq('mp_preapproval_id', preapprovalId);
       }
-      return NextResponse.json({ received: true, status: preApproval.status });
+      return NextResponse.json({ success: true }, { status: 200 });
     }
 
     // 3. Extrair dados necessários
     const userId = preApproval.external_reference; // user_id do Supabase
     if (!userId) {
       console.error('[WEBHOOK MP] external_reference ausente — não é possível identificar o usuário.');
-      return NextResponse.json(
-        { error: 'external_reference ausente.' },
-        { status: 422 }
-      );
+      return NextResponse.json({ error: 'external_reference ausente.' }, { status: 422 });
     }
 
     // 4. Determinar o plano pelo valor da transação
@@ -101,10 +98,9 @@ export async function POST(request: NextRequest) {
     }
 
     console.log(`[WEBHOOK MP] Assinatura ${planType} ativada para user ${userId}`);
-    return NextResponse.json({ received: true }, { status: 200 });
+    return NextResponse.json({ success: true }, { status: 200 });
   } catch (error: unknown) {
     console.error('[WEBHOOK MP] Erro não tratado:', error);
-    const message = error instanceof Error ? error.message : 'Erro interno.';
-    return NextResponse.json({ error: message }, { status: 500 });
+    return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
   }
 }
