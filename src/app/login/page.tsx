@@ -24,6 +24,9 @@ function AuthContent() {
   const [registrationSuccess, setRegistrationSuccess] = useState(false);
   const [resendCooldown, setResendCooldown] = useState(false);
 
+  const isEmailVerified = searchParams.get('verified') === 'true';
+  const paymentSuccess = searchParams.get('payment') === 'success';
+
   const clearErrors = () => setErrorMsg('');
 
   // ─────────────────────────────────────────────────────────────────────────────
@@ -40,72 +43,6 @@ function AuthContent() {
     if (!subscription) return false;
 
     return subscription.status === 'authorized' || subscription.status === 'active';
-  };
-
-  const redirectToCheckout = async (
-    plan: string,
-    accessToken?: string | null
-  ): Promise<{ redirected: boolean; unauthorized: boolean; errorMessage?: string }> => {
-    try {
-      const response = await fetch('/api/checkout', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
-        },
-        credentials: 'include',
-        body: JSON.stringify({ planType: plan }),
-      });
-
-      if (response.status === 401) {
-        return { redirected: false, unauthorized: true };
-      }
-
-      let result: { init_point?: string; error?: string } = {};
-      try {
-        result = await response.json();
-      } catch {
-        // Mantemos objeto vazio para tratar resposta não-JSON sem quebrar o fluxo.
-      }
-
-      if (response.ok && result.init_point) {
-        window.location.href = result.init_point;
-        return { redirected: true, unauthorized: false };
-      } else {
-        throw new Error(result.error || `Falha ao gerar cobrança (HTTP ${response.status}).`);
-      }
-    } catch (err) {
-      console.error('[LOGIN] Erro no checkout inline:', err);
-      return {
-        redirected: false,
-        unauthorized: false,
-        errorMessage: err instanceof Error ? err.message : 'Falha ao gerar cobrança.',
-      };
-    }
-  };
-
-  const redirectToCheckoutWithRetry = async (
-    plan: string
-  ): Promise<{ redirected: boolean; errorMessage?: string }> => {
-    const {
-      data: { session },
-    } = await supabase.auth.getSession();
-
-    let checkoutResult = await redirectToCheckout(plan, session?.access_token ?? null);
-
-    if (checkoutResult.redirected) return { redirected: true };
-
-    if (checkoutResult.unauthorized) {
-      const { data: refreshed } = await supabase.auth.refreshSession();
-      const refreshedToken = refreshed.session?.access_token ?? null;
-      checkoutResult = await redirectToCheckout(plan, refreshedToken);
-      if (checkoutResult.redirected) return { redirected: true };
-    }
-
-    return {
-      redirected: false,
-      errorMessage: checkoutResult.errorMessage,
-    };
   };
 
   // ─────────────────────────────────────────────────────────────────────────────
@@ -126,15 +63,7 @@ function AuthContent() {
         return;
       }
 
-      // Sem assinatura válida — verificar se tem plano na URL
-      const planFromUrl = searchParams.get('plan');
-      if (planFromUrl) {
-        // Tem plano → redirecionar para processing-payment com o plano
-        router.push(`/processing-payment?plan=${encodeURIComponent(planFromUrl)}`);
-        return;
-      }
-
-      // Sem plano na URL — mandar para a seção de preços
+      // Sem assinatura válida — mandar para a seção de preços
       router.push('/#preco');
     };
 
@@ -148,9 +77,8 @@ function AuthContent() {
   // Fluxo pós-login:
   //   1. signInWithPassword
   //   2. Consultar tabela `subscriptions`
-  //   3. Se VÁLIDA → /dashboard (ignora ?plan= na URL)
-  //   4. Se INVÁLIDA + ?plan= → /processing-payment?plan= → /api/checkout → Mercado Pago
-  //   5. Se INVÁLIDA sem plano → /#preco (seção de preços na home)
+  //   3. Se VÁLIDA → /dashboard
+  //   4. Se INVÁLIDA → /#preco
   // ─────────────────────────────────────────────────────────────────────────────
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -189,15 +117,7 @@ function AuthContent() {
     }
 
     // Passo C: Se INVÁLIDA / INEXISTENTE
-    const planFromUrl = searchParams.get('plan');
-
-    if (planFromUrl) {
-      // Tem plano na URL → Redirecionar para processing-payment com o plano
-      router.push(`/processing-payment?plan=${encodeURIComponent(planFromUrl)}`);
-      return;
-    }
-
-    // Sem plano na URL → Seção de preços
+    // Sempre vai para a área de preços caso ainda não exista assinatura ativa.
     router.push('/#preco');
   };
 
@@ -215,9 +135,7 @@ function AuthContent() {
 
     setLoading(true);
 
-    const planFromUrl = searchParams.get('plan');
     const redirectUrl = new URL(`${window.location.origin}/auth/callback`);
-    redirectUrl.searchParams.set('next', planFromUrl ? `/login?plan=${planFromUrl}` : '/login');
 
     const { error } = await supabase.auth.signUp({
       email,
@@ -277,11 +195,18 @@ function AuthContent() {
             </h2>
             <p className="text-foreground/50 text-sm mt-2 text-center">
               {registrationSuccess 
-                ? 'Enviamos o link de ativação para você.' 
+                ? 'Verifique seu e-mail para confirmar a conta.' 
                 : isLogin 
                   ? 'Insira suas credenciais para acessar o simulador.' 
                   : 'Junte-se à plataforma número 1 de treinamento B2B.'}
             </p>
+            {(isEmailVerified || paymentSuccess) && !registrationSuccess && (
+              <div className="mt-4 w-full rounded-xl border border-blue-500/20 bg-blue-500/10 px-4 py-3 text-sm text-blue-100">
+                {isEmailVerified
+                  ? 'E-mail confirmado com sucesso. Faça login para continuar.'
+                  : 'Pagamento detectado. Faça login novamente para sincronizar sua assinatura.'}
+              </div>
+            )}
           </div>
 
           {/* Banner de Erro Global */}

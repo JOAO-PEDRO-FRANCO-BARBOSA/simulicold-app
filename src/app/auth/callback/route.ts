@@ -5,9 +5,6 @@ import { cookies } from 'next/headers';
 export async function GET(request: Request) {
   const { searchParams, origin } = new URL(request.url);
   const code = searchParams.get('code');
-  
-  // URL alvo (fallback pro painel se não houver)
-  const next = searchParams.get('next') ?? '/dashboard';
 
   if (code) {
     const cookieStore = await cookies();
@@ -35,7 +32,7 @@ export async function GET(request: Request) {
     // Troca do code recebido no link de email por Sessão
     const { error } = await supabase.auth.exchangeCodeForSession(code);
     if (!error) {
-      return NextResponse.redirect(new URL(next || '/dashboard', request.url));
+      return NextResponse.redirect(new URL('/login?verified=true', request.url));
     } else {
       console.error('[AUTH_CALLBACK] Erro trocando token:', error);
     }
