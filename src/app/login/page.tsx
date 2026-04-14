@@ -63,8 +63,8 @@ function AuthContent() {
         return;
       }
 
-      // Sem assinatura válida — mandar para a seção de preços
-      router.push('/#preco');
+      // Sem assinatura válida — mandar para a página de checkout
+      router.push('/checkout');
     };
 
     checkExistingSession();
@@ -78,7 +78,7 @@ function AuthContent() {
   //   1. signInWithPassword
   //   2. Consultar tabela `subscriptions`
   //   3. Se VÁLIDA → /dashboard
-  //   4. Se INVÁLIDA → /#preco
+  //   4. Se INVÁLIDA → /checkout
   // ─────────────────────────────────────────────────────────────────────────────
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -117,8 +117,8 @@ function AuthContent() {
     }
 
     // Passo C: Se INVÁLIDA / INEXISTENTE
-    // Sempre vai para a área de preços caso ainda não exista assinatura ativa.
-    router.push('/#preco');
+    // Sempre vai para o checkout para escolher o plano sem cair na landing.
+    router.push('/checkout');
   };
 
   // ─────────────────────────────────────────────────────────────────────────────
