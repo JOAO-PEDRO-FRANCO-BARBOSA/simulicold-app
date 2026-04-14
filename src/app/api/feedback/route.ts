@@ -1,42 +1,10 @@
 // src/app/api/feedback/route.ts
-// Rota de envio de feedback por e-mail via SMTP (Nodemailer)
+// Rota de envio de feedback por e-mail via Resend API
 
-import nodemailer from 'nodemailer';
+import { NextResponse } from 'next/server';
+import { Resend } from 'resend';
 
 export const runtime = 'nodejs';
-
-function serializeError(error: unknown) {
-  if (error instanceof Error) {
-    const typedError = error as Error & {
-      code?: string;
-      command?: string;
-      response?: string;
-      errno?: number;
-      syscall?: string;
-      address?: string;
-      port?: number;
-      hostname?: string;
-      cause?: unknown;
-    };
-
-    return {
-      name: typedError.name,
-      message: typedError.message,
-      stack: typedError.stack,
-      code: typedError.code,
-      command: typedError.command,
-      response: typedError.response,
-      errno: typedError.errno,
-      syscall: typedError.syscall,
-      address: typedError.address,
-      port: typedError.port,
-      hostname: typedError.hostname,
-      cause: typedError.cause,
-    };
-  }
-
-  return error;
-}
 
 function escapeHtml(value: string): string {
   return value.replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -44,47 +12,43 @@ function escapeHtml(value: string): string {
 
 export async function POST(req: Request) {
   try {
+    const resendApiKey = process.env.RESEND_API_KEY;
+    if (!resendApiKey) {
+      return NextResponse.json(
+        { success: false, error: 'RESEND_API_KEY não configurada no servidor.' },
+        { status: 500 }
+      );
+    }
+
+    const resend = new Resend(resendApiKey);
     const body = await req.json();
-    const { message, userEmail } = body;
+    const { message, userEmail, userName } = body;
 
     if (!message || typeof message !== 'string' || message.trim().length === 0) {
-      return new Response('O campo "message" é obrigatório.', { status: 400 });
+      return NextResponse.json(
+        { success: false, error: 'O campo "message" é obrigatório.' },
+        { status: 400 }
+      );
     }
 
-    const host = process.env.SMTP_HOST;
-    const port = Number(process.env.SMTP_PORT) || 587;
-    const user = process.env.SMTP_USER;
-    const pass = process.env.SMTP_PASS;
-
-    if (!host || !user || !pass) {
-      console.error('Variáveis SMTP não configuradas no .env.local');
-      return new Response('Configuração de e-mail ausente no servidor.', { status: 500 });
+    if (!userEmail || typeof userEmail !== 'string' || userEmail.trim().length === 0) {
+      return NextResponse.json(
+        { success: false, error: 'O campo "userEmail" é obrigatório.' },
+        { status: 400 }
+      );
     }
-
-    const transporter = nodemailer.createTransport({
-      host,
-      port,
-      secure: port === 465,
-      auth: { user, pass },
-      tls: {
-        rejectUnauthorized: false,
-      },
-      logger: true,
-      debug: true,
-      connectionTimeout: 10000,
-      greetingTimeout: 10000,
-      socketTimeout: 10000,
-    });
 
     const safeMessage = escapeHtml(message);
-    const safeUserEmail =
-      typeof userEmail === 'string' && userEmail.trim().length > 0
-        ? escapeHtml(userEmail.trim())
+    const safeUserEmail = escapeHtml(userEmail.trim());
+    const safeUserName =
+      typeof userName === 'string' && userName.trim().length > 0
+        ? escapeHtml(userName.trim())
         : '';
 
-    await transporter.sendMail({
-      from: `"Simulicold Feedback" <${user}>`,
-      to: 'projetos@conselt.com.br',
+    const { data, error } = await resend.emails.send({
+      from: 'Simulicold <onboarding@resend.dev>',
+      to: 'joaobarbosa@conselt.com.br',
+      replyTo: userEmail.trim(),
       subject: 'Novo Feedback - Simulicold',
       html: `
         <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
@@ -94,6 +58,7 @@ export async function POST(req: Request) {
           <div style="background: #f8f9fa; padding: 16px; border-radius: 8px; margin: 16px 0;">
             <p style="white-space: pre-wrap; line-height: 1.6; color: #333;">${safeMessage}</p>
           </div>
+          ${safeUserName ? `<p style="color: #666; font-size: 14px;">Nome: <strong>${safeUserName}</strong></p>` : ''}
           ${safeUserEmail ? `<p style="color: #666; font-size: 14px;">Enviado por: <strong>${safeUserEmail}</strong></p>` : ''}
           <hr style="border: none; border-top: 1px solid #eee; margin: 20px 0;" />
           <p style="color: #999; font-size: 12px;">Enviado automaticamente pelo Simulicold.</p>
@@ -101,16 +66,31 @@ export async function POST(req: Request) {
       `,
     });
 
-    return Response.json({ success: true, message: 'Feedback enviado com sucesso!' });
+    if (error) {
+      console.error('[FEEDBACK] Erro Resend ao enviar e-mail:', error);
+      return NextResponse.json(
+        {
+          success: false,
+          error: error.message || 'Falha ao enviar e-mail pelo Resend.',
+        },
+        { status: 500 }
+      );
+    }
+
+    return NextResponse.json({
+      success: true,
+      message: 'Feedback enviado com sucesso!',
+      id: data?.id,
+    });
   } catch (error: unknown) {
-    console.error('[FEEDBACK] Erro completo ao enviar e-mail:', serializeError(error));
+    console.error('[FEEDBACK] Exceção inesperada ao enviar e-mail:', error);
 
     const errorMessage =
       error instanceof Error && error.message
         ? error.message
         : 'Erro interno ao enviar feedback';
 
-    return Response.json(
+    return NextResponse.json(
       {
         success: false,
         error: errorMessage,
