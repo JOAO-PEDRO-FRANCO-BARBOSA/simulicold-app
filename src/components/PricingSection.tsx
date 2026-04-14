@@ -62,7 +62,7 @@ export default function PricingSection() {
 
       if (!user) {
         // Redireciona para login e envia o plano desejado via URL
-        window.location.href = `/login?register=true&plan=${planType}`;
+        window.location.href = '/login?register=true';
         return;
       }
 

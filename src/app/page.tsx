@@ -175,7 +175,7 @@ export default function LandingPage() {
                 Acesso completo por 6 meses. Ideal para equipes escalando suas operações com máxima eficiência no pagamento a termo.
               </p>
               <Link 
-                href="/login?register=true&plan=semestral"
+                href="/login?register=true"
                 className="w-full py-3 bg-blue-600 hover:bg-blue-500 text-white font-medium rounded-lg transition-colors"
               >
                 Assinar Semestre
@@ -193,7 +193,7 @@ export default function LandingPage() {
                 Acesso total por 3 meses. Compromisso balanceado garantindo evolução contínua.
               </p>
               <Link 
-                href="/login?register=true&plan=trimestral"
+                href="/login?register=true"
                 className="w-full py-3 bg-blue-600 hover:bg-blue-500 text-white font-medium rounded-lg transition-colors"
               >
                 Assinar Trimestre
@@ -211,7 +211,7 @@ export default function LandingPage() {
                 Renovação mensal garantindo flexibilidade para quem quer testar e provar o valor.
               </p>
               <Link 
-                href="/login?register=true&plan=mensal"
+                href="/login?register=true"
                 className="w-full py-3 bg-blue-600 hover:bg-blue-500 text-white font-medium rounded-lg transition-colors"
               >
                 Assinar Mês

@@ -1,31 +1,82 @@
-import Link from 'next/link';
-import { FileText, ArrowRight, CheckCircle2 } from 'lucide-react';
+'use client';
 
-const plans = [
+import { useState } from 'react';
+import { ArrowRight, CheckCircle2, FileText, Loader2 } from 'lucide-react';
+import { supabase } from '@/lib/supabase';
+
+type PlanType = 'mensal' | 'trimestral' | 'semestral';
+
+const PLANS: Array<{
+  id: PlanType;
+  name: string;
+  price: string;
+  description: string;
+  featured?: boolean;
+}> = [
   {
+    id: 'mensal',
     name: 'Mensal',
     price: 'R$ 60',
     description: 'Renovação mensal com flexibilidade para testar e provar valor rapidamente.',
-    href: '/login?register=true&plan=mensal',
-    featured: false,
   },
   {
+    id: 'trimestral',
     name: 'Trimestral',
     price: 'R$ 170',
     description: 'Acesso total por 3 meses com equilíbrio entre custo e continuidade.',
-    href: '/login?register=true&plan=trimestral',
     featured: true,
   },
   {
+    id: 'semestral',
     name: 'Semestral',
     price: 'R$ 335',
     description: 'Acesso completo por 6 meses para equipes que querem escala com previsibilidade.',
-    href: '/login?register=true&plan=semestral',
-    featured: false,
   },
 ];
 
 export default function CheckoutPage() {
+  const [loadingPlan, setLoadingPlan] = useState<PlanType | null>(null);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  async function handleSubscribe(planType: PlanType) {
+    setErrorMsg(null);
+    setLoadingPlan(planType);
+
+    try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      if (!user) {
+        window.location.href = '/login?register=true';
+        return;
+      }
+
+      const response = await fetch('/api/checkout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ planType }),
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.error || 'Erro ao gerar link de pagamento.');
+      }
+
+      if (!result.init_point) {
+        throw new Error('Link de pagamento não encontrado na resposta.');
+      }
+
+      window.location.href = result.init_point;
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Ocorreu um erro inesperado.';
+      setErrorMsg(message);
+      setLoadingPlan(null);
+    }
+  }
+
   return (
     <main className="min-h-screen bg-[#070b14] text-slate-200 font-sans selection:bg-blue-600/30">
       <div className="fixed inset-0 z-0 pointer-events-none overflow-hidden flex justify-center items-center opacity-30 mix-blend-screen">
@@ -44,58 +95,77 @@ export default function CheckoutPage() {
         <div className="text-center max-w-3xl mx-auto mb-14">
           <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full border border-blue-500/20 bg-blue-500/10 text-blue-300 text-sm font-medium mb-6">
             <CheckCircle2 className="w-4 h-4" />
-            Fluxo de assinatura
+            Checkout e pagamento
           </div>
           <h1 className="text-4xl md:text-6xl font-extrabold tracking-tight mb-6 leading-tight text-white">
-            Escolha seu plano e continue o cadastro.
+            Escolha seu plano e siga para o Mercado Pago.
           </h1>
           <p className="text-lg md:text-xl text-slate-400 leading-relaxed">
-            Se você já tem conta, o login vai te levar direto para a cobrança correta. Se não tem, escolha um plano e crie sua conta.
+            Ao clicar em assinar, vamos gerar o link do pagamento correspondente ao plano escolhido.
           </p>
         </div>
 
         <div className="grid md:grid-cols-3 gap-6 max-w-6xl mx-auto items-stretch">
-          {plans.map((plan) => (
-            <div
-              key={plan.name}
-              className={`rounded-2xl p-8 flex flex-col text-center border transition-all ${
-                plan.featured
-                  ? 'bg-[#131b2c] border-blue-600/60 shadow-[0_0_30px_rgba(37,99,235,0.12)] scale-[1.02]'
-                  : 'bg-[#0f1523] border-blue-900/30 hover:border-blue-700/50'
-              }`}
-            >
-              <div className="w-12 h-12 bg-blue-900/20 rounded-full flex items-center justify-center mx-auto mb-6 text-blue-400">
-                <FileText className="w-5 h-5" />
-              </div>
+          {PLANS.map((plan) => {
+            const isLoading = loadingPlan === plan.id;
+            const isAnyLoading = loadingPlan !== null;
 
-              <h2 className="text-xl font-bold text-white mb-2">{plan.name}</h2>
-              <div className="text-blue-400 font-semibold mb-6">({plan.price})</div>
-              <p className="text-slate-400 text-sm mb-8 flex-1">{plan.description}</p>
-
-              <Link
-                href={plan.href}
-                className="w-full py-3 bg-blue-600 hover:bg-blue-500 text-white font-medium rounded-lg transition-colors inline-flex items-center justify-center gap-2"
+            return (
+              <div
+                key={plan.id}
+                className={`relative rounded-2xl p-8 flex flex-col text-center border transition-all ${
+                  plan.featured
+                    ? 'bg-[#131b2c] border-blue-600/60 shadow-[0_0_30px_rgba(37,99,235,0.12)] scale-[1.02]'
+                    : 'bg-[#0f1523] border-blue-900/30 hover:border-blue-700/50'
+                }`}
               >
-                Assinar agora
-                <ArrowRight className="w-4 h-4" />
-              </Link>
-            </div>
-          ))}
+                {plan.featured && (
+                  <div className="absolute -top-3.5 left-1/2 -translate-x-1/2">
+                    <span className="bg-blue-600 text-white text-xs font-bold px-4 py-1 rounded-full shadow-md">
+                      Mais escolhido
+                    </span>
+                  </div>
+                )}
+
+                <div
+                  className={`w-12 h-12 rounded-full flex items-center justify-center mx-auto mb-6 text-blue-400 ${
+                    plan.featured ? 'bg-blue-900/40' : 'bg-blue-900/20'
+                  }`}
+                >
+                  <FileText className="w-5 h-5" />
+                </div>
+
+                <h2 className="text-xl font-bold text-white mb-2">{plan.name}</h2>
+                <div className="text-blue-400 font-semibold mb-6">({plan.price})</div>
+                <p className="text-slate-400 text-sm mb-8 flex-1">{plan.description}</p>
+
+                <button
+                  onClick={() => handleSubscribe(plan.id)}
+                  disabled={isAnyLoading}
+                  className="w-full py-3 bg-blue-600 hover:bg-blue-500 disabled:opacity-60 disabled:cursor-not-allowed text-white font-medium rounded-lg transition-colors flex items-center justify-center gap-2"
+                >
+                  {isLoading ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Aguarde...
+                    </>
+                  ) : (
+                    <>
+                      Assinar agora
+                      <ArrowRight className="w-4 h-4" />
+                    </>
+                  )}
+                </button>
+              </div>
+            );
+          })}
         </div>
 
-        <div className="mt-16 max-w-4xl mx-auto bg-[#0f1523]/80 border border-blue-900/30 rounded-2xl p-8 text-center">
-          <h3 className="text-2xl font-bold text-white mb-3">Já tem conta?</h3>
-          <p className="text-slate-400 mb-6">
-            Entre com seu e-mail e senha para que o sistema identifique sua assinatura e siga automaticamente para o dashboard ou cobrança.
-          </p>
-          <Link
-            href="/login"
-            className="inline-flex items-center gap-2 px-6 py-3 rounded-lg border border-slate-700 hover:border-blue-500 text-white hover:text-blue-400 transition-all"
-          >
-            Entrar
-            <ArrowRight className="w-4 h-4" />
-          </Link>
-        </div>
+        {errorMsg && (
+          <div className="mt-6 max-w-lg mx-auto bg-red-900/20 border border-red-700/40 rounded-xl p-4 text-center">
+            <p className="text-red-400 text-sm">{errorMsg}</p>
+          </div>
+        )}
       </section>
     </main>
   );
