@@ -22,7 +22,7 @@ export async function POST(req: Request) {
 
     const resend = new Resend(resendApiKey);
     const body = await req.json();
-    const { message } = body;
+    const { message } = body as { message?: string };
 
     if (!message || typeof message !== 'string' || message.trim().length === 0) {
       return NextResponse.json(
@@ -31,22 +31,21 @@ export async function POST(req: Request) {
       );
     }
 
-    const safeMessage = escapeHtml(message);
+    const safeMessage = escapeHtml(message.trim());
 
     const { data, error } = await resend.emails.send({
-      from: 'Simulicold <onboarding@resend.dev>',
-      to: 'francojoao512@gmail.com',
-      subject: 'Novo Feedback Anônimo - Simulicold',
+      from: 'Simulicold <contato@simulicold.conselt.com.br>',
+      to: 'joaobarbosa@conselt.com.br',
+      subject: 'Novo Feedback - Simulicold',
       html: `
-        <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-          <h2 style="color: #3b82f6; border-bottom: 2px solid #3b82f6; padding-bottom: 10px;">
-            Novo Feedback Recebido
-          </h2>
-          <div style="background: #f8f9fa; padding: 16px; border-radius: 8px; margin: 16px 0;">
-            <p style="white-space: pre-wrap; line-height: 1.6; color: #333;">${safeMessage}</p>
+        <div style="font-family: Arial, Helvetica, sans-serif; max-width: 640px; margin: 0 auto; padding: 24px; background: #ffffff; border: 1px solid #e5e7eb; border-radius: 12px;">
+          <h2 style="color: #1e40af; margin: 0 0 8px 0;">Novo Feedback Recebido</h2>
+          <p style="color: #6b7280; font-size: 14px; margin: 0 0 18px 0;">Mensagem enviada pelo formulário de suporte da plataforma Simulicold.</p>
+          <div style="background: #f9fafb; border: 1px solid #e5e7eb; padding: 16px; border-radius: 10px;">
+            <p style="white-space: pre-wrap; line-height: 1.7; color: #111827; margin: 0;">${safeMessage}</p>
           </div>
-          <hr style="border: none; border-top: 1px solid #eee; margin: 20px 0;" />
-          <p style="color: #999; font-size: 12px;">Enviado automaticamente pelo Simulicold.</p>
+          <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 20px 0;" />
+          <p style="color: #9ca3af; font-size: 12px; margin: 0;">Enviado automaticamente pelo Simulicold.</p>
         </div>
       `,
     });
@@ -62,11 +61,14 @@ export async function POST(req: Request) {
       );
     }
 
-    return NextResponse.json({
-      success: true,
-      message: 'Feedback enviado com sucesso!',
-      id: data?.id,
-    });
+    return NextResponse.json(
+      {
+        success: true,
+        message: 'Feedback enviado com sucesso!',
+        id: data?.id,
+      },
+      { status: 200 }
+    );
   } catch (error: unknown) {
     console.error('[FEEDBACK] Exceção inesperada ao enviar e-mail:', error);
 
