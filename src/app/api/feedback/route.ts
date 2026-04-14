@@ -35,7 +35,7 @@ export async function POST(req: Request) {
 
     const { data, error } = await resend.emails.send({
       from: 'Simulicold <onboarding@resend.dev>',
-      to: 'joaobarbosa@conselt.com.br',
+      to: 'francojoao512@gmail.com',
       subject: 'Novo Feedback Anônimo - Simulicold',
       html: `
         <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
