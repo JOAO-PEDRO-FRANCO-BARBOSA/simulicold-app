@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, Suspense } from 'react';
+import { useState, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Mail, Lock, ArrowRight, UserPlus, LogIn, AlertCircle, CheckCircle, RefreshCw, Eye, EyeOff, Loader2 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
@@ -44,32 +44,6 @@ function AuthContent() {
 
     return subscription.status === 'authorized' || subscription.status === 'active';
   };
-
-  // ─────────────────────────────────────────────────────────────────────────────
-  // EFEITO: Se o usuário já está autenticado (ex: voltou ao /login por um link),
-  // verificar assinatura e redirecionar sem exigir novo login.
-  // ─────────────────────────────────────────────────────────────────────────────
-  useEffect(() => {
-    const checkExistingSession = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return; // Não logado — exibir formulário normalmente
-
-      setLoading(true);
-
-      const hasValidSub = await checkSubscription(user.id);
-
-      if (hasValidSub) {
-        router.push('/dashboard');
-        return;
-      }
-
-      // Sem assinatura válida — mandar para a página de checkout
-      router.push('/checkout');
-    };
-
-    checkExistingSession();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [router, searchParams]);
 
   // ─────────────────────────────────────────────────────────────────────────────
   // HANDLER: LOGIN
