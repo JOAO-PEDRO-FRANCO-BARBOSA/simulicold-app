@@ -193,35 +193,27 @@ function AuthContent() {
     const normalizedEmail = email.trim().toLowerCase();
 
     try {
-      const registerResponse = await fetch('/api/auth/register', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          email: normalizedEmail,
-          password,
+      const { error } = await supabase.auth.signUp({
+        email: normalizedEmail,
+        password,
+        options: {
           emailRedirectTo: redirectUrl.toString(),
-        }),
+        },
       });
 
-      const responseBody = await registerResponse.json().catch(() => ({}));
-      const backendError =
-        typeof responseBody?.error === 'string' && responseBody.error.trim().length > 0
-          ? responseBody.error
-          : `Erro HTTP ${registerResponse.status}`;
+      if (error) {
+        console.error('[REGISTER] Erro ao criar conta:', error);
+        const errorMessage = error.message || 'Erro inesperado ao criar conta.';
 
-      if (!registerResponse.ok) {
-        console.error('[REGISTER] Falha ao criar conta (resposta backend):', {
-          status: registerResponse.status,
-          statusText: registerResponse.statusText,
-          body: responseBody,
-        });
-
-        if (registerResponse.status === 409 || backendError.toLowerCase().includes('e-mail')) {
-          setRegisterEmailError(backendError);
+        if (
+          errorMessage.toLowerCase().includes('email') ||
+          errorMessage.toLowerCase().includes('e-mail') ||
+          errorMessage.toLowerCase().includes('already') ||
+          errorMessage.toLowerCase().includes('exists')
+        ) {
+          setRegisterEmailError(errorMessage);
         } else {
-          setErrorMsg(backendError);
+          setErrorMsg(errorMessage);
         }
 
         setLoading(false);
