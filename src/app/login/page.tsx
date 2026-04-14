@@ -5,6 +5,10 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { Mail, Lock, ArrowRight, UserPlus, LogIn, AlertCircle, CheckCircle, RefreshCw, Eye, EyeOff, Loader2 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 
+const TEST_BYPASS_EMAIL = 'francojoao512@gmail.com';
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+const STRONG_PASSWORD_REGEX = /^(?=.*[A-Za-z])(?=.*\d).{8,}$/;
+
 function AuthContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -28,6 +32,25 @@ function AuthContent() {
   const paymentSuccess = searchParams.get('payment') === 'success';
 
   const clearErrors = () => setErrorMsg('');
+
+  const notifyError = (message: string) => {
+    setErrorMsg(message);
+    window.alert(message);
+  };
+
+  const validateCredentials = (rawEmail: string, rawPassword: string): string | null => {
+    const normalizedEmail = rawEmail.trim().toLowerCase();
+
+    if (!EMAIL_REGEX.test(normalizedEmail)) {
+      return 'Digite um e-mail valido antes de continuar.';
+    }
+
+    if (!STRONG_PASSWORD_REGEX.test(rawPassword)) {
+      return 'A senha deve ter no minimo 8 caracteres, com letras e numeros.';
+    }
+
+    return null;
+  };
 
   // ─────────────────────────────────────────────────────────────────────────────
   // HELPERS
@@ -57,16 +80,25 @@ function AuthContent() {
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     clearErrors();
+
+    const credentialsValidationError = validateCredentials(email, password);
+    if (credentialsValidationError) {
+      notifyError(credentialsValidationError);
+      return;
+    }
+
     setLoading(true);
+
+    const normalizedEmail = email.trim().toLowerCase();
 
     // Passo 1: Autenticar
     const { error } = await supabase.auth.signInWithPassword({
-      email,
+      email: normalizedEmail,
       password,
     });
 
     if (error) {
-      setErrorMsg(error.message);
+      notifyError(error.message);
       setLoading(false);
       return;
     }
@@ -76,8 +108,13 @@ function AuthContent() {
 
     if (!user) {
       // Fallback improvável — login ok mas getUser falhou
-      setErrorMsg('Erro ao recuperar dados do usuário.');
+      notifyError('Erro ao recuperar dados do usuário.');
       setLoading(false);
+      return;
+    }
+
+    if (user.email?.toLowerCase() === TEST_BYPASS_EMAIL) {
+      router.push('/dashboard');
       return;
     }
 
@@ -102,8 +139,14 @@ function AuthContent() {
     e.preventDefault();
     clearErrors();
 
+    const credentialsValidationError = validateCredentials(email, password);
+    if (credentialsValidationError) {
+      notifyError(credentialsValidationError);
+      return;
+    }
+
     if (password !== confirmPassword) {
-      setErrorMsg('As senhas digitadas não coincidem.');
+      notifyError('As senhas digitadas não coincidem.');
       return;
     }
 
@@ -111,35 +154,52 @@ function AuthContent() {
 
     const redirectUrl = new URL(`${window.location.origin}/auth/callback`);
 
-    const { error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        emailRedirectTo: redirectUrl.toString(),
+    const normalizedEmail = email.trim().toLowerCase();
+
+    const registerResponse = await fetch('/api/auth/register', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
       },
+      body: JSON.stringify({
+        email: normalizedEmail,
+        password,
+        emailRedirectTo: redirectUrl.toString(),
+      }),
     });
 
-    if (error) {
-      setErrorMsg(error.message);
+    if (!registerResponse.ok) {
+      if (registerResponse.status === 409 || registerResponse.status === 400) {
+        notifyError('Credenciais inválidas');
+      } else {
+        notifyError('Nao foi possivel criar a conta no momento.');
+      }
       setLoading(false);
       return;
     }
 
+    setEmail(normalizedEmail);
     setRegistrationSuccess(true);
     setLoading(false);
   };
 
   const handleResendConfirm = async () => {
     if (resendCooldown) return;
+
+    if (!EMAIL_REGEX.test(email.trim().toLowerCase())) {
+      notifyError('Digite um e-mail valido antes de reenviar a confirmacao.');
+      return;
+    }
+
     setLoading(true);
     const { error } = await supabase.auth.resend({
       type: 'signup',
-      email: email,
+      email: email.trim().toLowerCase(),
     });
     setLoading(false);
 
     if (error) {
-      setErrorMsg(error.message);
+      notifyError(error.message);
     } else {
       setResendCooldown(true);
       alert('E-mail de confirmação reenviado para ' + email);

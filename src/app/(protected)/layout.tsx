@@ -2,6 +2,8 @@ import { createServerClient } from '@supabase/ssr';
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 
+const TEST_BYPASS_EMAIL = 'francojoao512@gmail.com';
+
 export default async function ProtectedLayout({
   children,
 }: {
@@ -30,6 +32,10 @@ export default async function ProtectedLayout({
 
   if (!user) {
     redirect('/login');
+  }
+
+  if (user.email?.toLowerCase() === TEST_BYPASS_EMAIL) {
+    return <>{children}</>;
   }
 
   const { data: subscription } = await supabase
