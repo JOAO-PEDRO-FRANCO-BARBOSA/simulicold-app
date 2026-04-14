@@ -2,7 +2,7 @@
 
 import { useState, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Mail, Lock, ArrowRight, UserPlus, LogIn, AlertCircle, CheckCircle, RefreshCw, Eye, EyeOff, Loader2 } from 'lucide-react';
+import { Mail, Lock, ArrowRight, UserPlus, AlertCircle, RefreshCw, Eye, EyeOff, Loader2 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 
 const TEST_BYPASS_EMAIL = 'francojoao512@gmail.com';
@@ -24,6 +24,12 @@ function AuthContent() {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
+  const [successMsg, setSuccessMsg] = useState('');
+  const [loginEmailError, setLoginEmailError] = useState('');
+  const [loginPasswordError, setLoginPasswordError] = useState('');
+  const [registerEmailError, setRegisterEmailError] = useState('');
+  const [registerPasswordError, setRegisterPasswordError] = useState('');
+  const [confirmPasswordError, setConfirmPasswordError] = useState('');
   const [loading, setLoading] = useState(false);
   const [registrationSuccess, setRegistrationSuccess] = useState(false);
   const [resendCooldown, setResendCooldown] = useState(false);
@@ -31,20 +37,27 @@ function AuthContent() {
   const isEmailVerified = searchParams.get('verified') === 'true';
   const paymentSuccess = searchParams.get('payment') === 'success';
 
-  const clearErrors = () => setErrorMsg('');
-
-  const notifyError = (message: string) => {
-    setErrorMsg(message);
-    window.alert(message);
+  const clearAllErrors = () => {
+    setErrorMsg('');
+    setSuccessMsg('');
+    setLoginEmailError('');
+    setLoginPasswordError('');
+    setRegisterEmailError('');
+    setRegisterPasswordError('');
+    setConfirmPasswordError('');
   };
 
-  const validateCredentials = (rawEmail: string, rawPassword: string): string | null => {
+  const validateEmail = (rawEmail: string): string | null => {
     const normalizedEmail = rawEmail.trim().toLowerCase();
 
     if (!EMAIL_REGEX.test(normalizedEmail)) {
       return 'Digite um e-mail valido antes de continuar.';
     }
 
+    return null;
+  };
+
+  const validateStrongPassword = (rawPassword: string): string | null => {
     if (!STRONG_PASSWORD_REGEX.test(rawPassword)) {
       return 'A senha deve ter no minimo 8 caracteres, com letras e numeros.';
     }
@@ -79,11 +92,22 @@ function AuthContent() {
   // ─────────────────────────────────────────────────────────────────────────────
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    clearErrors();
+    clearAllErrors();
 
-    const credentialsValidationError = validateCredentials(email, password);
-    if (credentialsValidationError) {
-      notifyError(credentialsValidationError);
+    const emailValidationError = validateEmail(email);
+    let hasValidationError = false;
+
+    if (emailValidationError) {
+      setLoginEmailError(emailValidationError);
+      hasValidationError = true;
+    }
+
+    if (!password) {
+      setLoginPasswordError('Digite sua senha para continuar.');
+      hasValidationError = true;
+    }
+
+    if (hasValidationError) {
       return;
     }
 
@@ -98,7 +122,7 @@ function AuthContent() {
     });
 
     if (error) {
-      notifyError(error.message);
+      setErrorMsg(error.message);
       setLoading(false);
       return;
     }
@@ -108,7 +132,7 @@ function AuthContent() {
 
     if (!user) {
       // Fallback improvável — login ok mas getUser falhou
-      notifyError('Erro ao recuperar dados do usuário.');
+      setErrorMsg('Erro ao recuperar dados do usuário.');
       setLoading(false);
       return;
     }
@@ -137,16 +161,28 @@ function AuthContent() {
   // ─────────────────────────────────────────────────────────────────────────────
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
-    clearErrors();
+    clearAllErrors();
 
-    const credentialsValidationError = validateCredentials(email, password);
-    if (credentialsValidationError) {
-      notifyError(credentialsValidationError);
-      return;
+    const emailValidationError = validateEmail(email);
+    const passwordValidationError = validateStrongPassword(password);
+    let hasValidationError = false;
+
+    if (emailValidationError) {
+      setRegisterEmailError(emailValidationError);
+      hasValidationError = true;
+    }
+
+    if (passwordValidationError) {
+      setRegisterPasswordError(passwordValidationError);
+      hasValidationError = true;
     }
 
     if (password !== confirmPassword) {
-      notifyError('As senhas digitadas não coincidem.');
+      setConfirmPasswordError('As senhas digitadas não coincidem.');
+      hasValidationError = true;
+    }
+
+    if (hasValidationError) {
       return;
     }
 
@@ -156,38 +192,66 @@ function AuthContent() {
 
     const normalizedEmail = email.trim().toLowerCase();
 
-    const registerResponse = await fetch('/api/auth/register', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        email: normalizedEmail,
-        password,
-        emailRedirectTo: redirectUrl.toString(),
-      }),
-    });
+    try {
+      const registerResponse = await fetch('/api/auth/register', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          email: normalizedEmail,
+          password,
+          emailRedirectTo: redirectUrl.toString(),
+        }),
+      });
 
-    if (!registerResponse.ok) {
-      if (registerResponse.status === 409 || registerResponse.status === 400) {
-        notifyError('Credenciais inválidas');
-      } else {
-        notifyError('Nao foi possivel criar a conta no momento.');
+      const responseBody = await registerResponse.json().catch(() => ({}));
+      const backendError =
+        typeof responseBody?.error === 'string' && responseBody.error.trim().length > 0
+          ? responseBody.error
+          : `Erro HTTP ${registerResponse.status}`;
+
+      if (!registerResponse.ok) {
+        console.error('[REGISTER] Falha ao criar conta (resposta backend):', {
+          status: registerResponse.status,
+          statusText: registerResponse.statusText,
+          body: responseBody,
+        });
+
+        if (registerResponse.status === 409 || backendError.toLowerCase().includes('e-mail')) {
+          setRegisterEmailError(backendError);
+        } else {
+          setErrorMsg(backendError);
+        }
+
+        setLoading(false);
+        return;
       }
+
+      setEmail(normalizedEmail);
+      setRegistrationSuccess(true);
+    } catch (error) {
+      console.error('[REGISTER] Excecao inesperada no cadastro:', error);
+      setErrorMsg(
+        error instanceof Error
+          ? error.message
+          : 'Erro inesperado ao criar conta. Verifique sua conexao e tente novamente.'
+      );
       setLoading(false);
       return;
+    } finally {
+      setLoading(false);
     }
-
-    setEmail(normalizedEmail);
-    setRegistrationSuccess(true);
-    setLoading(false);
   };
 
   const handleResendConfirm = async () => {
     if (resendCooldown) return;
 
+    setSuccessMsg('');
+    setErrorMsg('');
+
     if (!EMAIL_REGEX.test(email.trim().toLowerCase())) {
-      notifyError('Digite um e-mail valido antes de reenviar a confirmacao.');
+      setRegisterEmailError('Digite um e-mail valido antes de reenviar a confirmacao.');
       return;
     }
 
@@ -199,17 +263,17 @@ function AuthContent() {
     setLoading(false);
 
     if (error) {
-      notifyError(error.message);
+      setErrorMsg(error.message);
     } else {
       setResendCooldown(true);
-      alert('E-mail de confirmação reenviado para ' + email);
+      setSuccessMsg(`E-mail de confirmacao reenviado para ${email.trim().toLowerCase()}.`);
       setTimeout(() => setResendCooldown(false), 30000); // 30s cooldown
     }
   };
 
   const toggleMode = (loginMode: boolean) => {
     setIsLogin(loginMode);
-    clearErrors();
+    clearAllErrors();
     setRegistrationSuccess(false);
   };
 
@@ -248,6 +312,12 @@ function AuthContent() {
             <div className="mb-6 p-4 bg-red-500/10 border border-red-500/50 rounded-xl flex items-start gap-3">
               <AlertCircle className="w-5 h-5 text-red-500 shrink-0 mt-0.5" />
               <p className="text-sm font-medium text-red-500">{errorMsg}</p>
+            </div>
+          )}
+
+          {successMsg && !registrationSuccess && (
+            <div className="mb-6 p-4 bg-green-500/10 border border-green-500/30 rounded-xl">
+              <p className="text-sm font-medium text-green-400">{successMsg}</p>
             </div>
           )}
 
@@ -298,11 +368,15 @@ function AuthContent() {
                           type="email" 
                           placeholder="seu@email.com"
                           value={email}
-                          onChange={(e) => setEmail(e.target.value)}
+                          onChange={(e) => {
+                            setEmail(e.target.value);
+                            setLoginEmailError('');
+                          }}
                           className="w-full bg-background border border-border/60 text-foreground text-sm rounded-xl py-3.5 pl-12 pr-4 focus:outline-none focus:border-accent/50 focus:ring-1 focus:ring-accent/50 transition-all placeholder:text-foreground/30 autofill:shadow-[inset_0_0_0_1000px_var(--background)] autofill:[-webkit-text-fill-color:var(--foreground)]"
                           required
                         />
                       </div>
+                      {loginEmailError && <p className="text-red-500 text-sm mt-1">{loginEmailError}</p>}
                     </div>
 
                     <div>
@@ -313,7 +387,10 @@ function AuthContent() {
                           type={showPassword ? 'text' : 'password'} 
                           placeholder="••••••••"
                           value={password}
-                          onChange={(e) => setPassword(e.target.value)}
+                          onChange={(e) => {
+                            setPassword(e.target.value);
+                            setLoginPasswordError('');
+                          }}
                           className="w-full bg-background border border-border/60 text-foreground text-sm rounded-xl py-3.5 pl-12 pr-12 focus:outline-none focus:border-accent/50 focus:ring-1 focus:ring-accent/50 transition-all placeholder:text-foreground/30 autofill:shadow-[inset_0_0_0_1000px_var(--background)] autofill:[-webkit-text-fill-color:var(--foreground)]"
                           required
                         />
@@ -325,6 +402,7 @@ function AuthContent() {
                           {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                         </button>
                       </div>
+                      {loginPasswordError && <p className="text-red-500 text-sm mt-1">{loginPasswordError}</p>}
                       <div className="flex justify-end mt-2">
                         <button type="button" className="text-xs text-accent/80 hover:text-accent font-semibold transition-colors cursor-pointer">
                           Esqueci minha senha
@@ -359,11 +437,15 @@ function AuthContent() {
                           type="email" 
                           placeholder="seu@email.com"
                           value={email}
-                          onChange={(e) => setEmail(e.target.value)}
+                          onChange={(e) => {
+                            setEmail(e.target.value);
+                            setRegisterEmailError('');
+                          }}
                           className="w-full bg-background border border-border/60 text-foreground text-sm rounded-xl py-3.5 pl-12 pr-4 focus:outline-none focus:border-accent/50 focus:ring-1 focus:ring-accent/50 transition-all placeholder:text-foreground/30 autofill:shadow-[inset_0_0_0_1000px_var(--background)] autofill:[-webkit-text-fill-color:var(--foreground)]"
                           required
                         />
                       </div>
+                      {registerEmailError && <p className="text-red-500 text-sm mt-1">{registerEmailError}</p>}
                     </div>
 
                     <div>
@@ -374,7 +456,10 @@ function AuthContent() {
                           type={showPassword ? 'text' : 'password'} 
                           placeholder="Mínimo de 8 caracteres"
                           value={password}
-                          onChange={(e) => setPassword(e.target.value)}
+                          onChange={(e) => {
+                            setPassword(e.target.value);
+                            setRegisterPasswordError('');
+                          }}
                           className="w-full bg-background border border-border/60 text-foreground text-sm rounded-xl py-3.5 pl-12 pr-12 focus:outline-none focus:border-accent/50 focus:ring-1 focus:ring-accent/50 transition-all placeholder:text-foreground/30 autofill:shadow-[inset_0_0_0_1000px_var(--background)] autofill:[-webkit-text-fill-color:var(--foreground)]"
                           required
                           minLength={8}
@@ -387,6 +472,7 @@ function AuthContent() {
                           {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                         </button>
                       </div>
+                      {registerPasswordError && <p className="text-red-500 text-sm mt-1">{registerPasswordError}</p>}
                     </div>
 
                     <div>
@@ -397,7 +483,10 @@ function AuthContent() {
                           type={showConfirmPassword ? 'text' : 'password'} 
                           placeholder="Repita sua senha"
                           value={confirmPassword}
-                          onChange={(e) => setConfirmPassword(e.target.value)}
+                          onChange={(e) => {
+                            setConfirmPassword(e.target.value);
+                            setConfirmPasswordError('');
+                          }}
                           className="w-full bg-background border border-border/60 text-foreground text-sm rounded-xl py-3.5 pl-12 pr-12 focus:outline-none focus:border-accent/50 focus:ring-1 focus:ring-accent/50 transition-all placeholder:text-foreground/30 autofill:shadow-[inset_0_0_0_1000px_var(--background)] autofill:[-webkit-text-fill-color:var(--foreground)]"
                           required
                         />
@@ -409,6 +498,7 @@ function AuthContent() {
                           {showConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                         </button>
                       </div>
+                      {confirmPasswordError && <p className="text-red-500 text-sm mt-1">{confirmPasswordError}</p>}
                     </div>
                   </div>
 
