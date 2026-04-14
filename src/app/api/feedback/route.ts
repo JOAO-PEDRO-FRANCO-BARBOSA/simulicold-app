@@ -38,6 +38,10 @@ function serializeError(error: unknown) {
   return error;
 }
 
+function escapeHtml(value: string): string {
+  return value.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
 export async function POST(req: Request) {
   try {
     const body = await req.json();
@@ -72,39 +76,45 @@ export async function POST(req: Request) {
       socketTimeout: 10000,
     });
 
+    const safeMessage = escapeHtml(message);
+    const safeUserEmail =
+      typeof userEmail === 'string' && userEmail.trim().length > 0
+        ? escapeHtml(userEmail.trim())
+        : '';
+
     await transporter.sendMail({
       from: `"Simulicold Feedback" <${user}>`,
       to: 'projetos@conselt.com.br',
-      subject: '📩 Novo Feedback — Simulicold',
+      subject: 'Novo Feedback - Simulicold',
       html: `
         <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
           <h2 style="color: #3b82f6; border-bottom: 2px solid #3b82f6; padding-bottom: 10px;">
             Novo Feedback Recebido
           </h2>
           <div style="background: #f8f9fa; padding: 16px; border-radius: 8px; margin: 16px 0;">
-            <p style="white-space: pre-wrap; line-height: 1.6; color: #333;">${message.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</p>
+            <p style="white-space: pre-wrap; line-height: 1.6; color: #333;">${safeMessage}</p>
           </div>
-          ${userEmail ? `<p style="color: #666; font-size: 14px;">Enviado por: <strong>${userEmail}</strong></p>` : ''}
+          ${safeUserEmail ? `<p style="color: #666; font-size: 14px;">Enviado por: <strong>${safeUserEmail}</strong></p>` : ''}
           <hr style="border: none; border-top: 1px solid #eee; margin: 20px 0;" />
           <p style="color: #999; font-size: 12px;">Enviado automaticamente pelo Simulicold.</p>
         </div>
-      } catch (error: unknown) {
-        console.error('[FEEDBACK] Erro completo ao enviar e-mail:', serializeError(error));
+      `,
+    });
 
-        const errorMessage =
-          error instanceof Error && error.message
-            ? error.message
-            : 'Erro interno ao enviar feedback';
+    return Response.json({ success: true, message: 'Feedback enviado com sucesso!' });
+  } catch (error: unknown) {
+    console.error('[FEEDBACK] Erro completo ao enviar e-mail:', serializeError(error));
 
-        return Response.json(
-          {
-            success: false,
-            error: errorMessage,
-          },
-          { status: 500 }
-        );
-    return new Response(
-      error.message || 'Erro interno ao enviar feedback',
+    const errorMessage =
+      error instanceof Error && error.message
+        ? error.message
+        : 'Erro interno ao enviar feedback';
+
+    return Response.json(
+      {
+        success: false,
+        error: errorMessage,
+      },
       { status: 500 }
     );
   }
