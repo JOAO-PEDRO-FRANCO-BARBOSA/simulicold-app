@@ -5,6 +5,39 @@ import nodemailer from 'nodemailer';
 
 export const runtime = 'nodejs';
 
+function serializeError(error: unknown) {
+  if (error instanceof Error) {
+    const typedError = error as Error & {
+      code?: string;
+      command?: string;
+      response?: string;
+      errno?: number;
+      syscall?: string;
+      address?: string;
+      port?: number;
+      hostname?: string;
+      cause?: unknown;
+    };
+
+    return {
+      name: typedError.name,
+      message: typedError.message,
+      stack: typedError.stack,
+      code: typedError.code,
+      command: typedError.command,
+      response: typedError.response,
+      errno: typedError.errno,
+      syscall: typedError.syscall,
+      address: typedError.address,
+      port: typedError.port,
+      hostname: typedError.hostname,
+      cause: typedError.cause,
+    };
+  }
+
+  return error;
+}
+
 export async function POST(req: Request) {
   try {
     const body = await req.json();
@@ -27,13 +60,16 @@ export async function POST(req: Request) {
     const transporter = nodemailer.createTransport({
       host,
       port,
-      secure: true,
+      secure: port === 465,
       auth: { user, pass },
       tls: {
         rejectUnauthorized: false,
       },
-      logger: true, // Adicionado para vermos o log no terminal
-      debug: true,  // Adicionado para vermos a transação SMTP
+      logger: true,
+      debug: true,
+      connectionTimeout: 10000,
+      greetingTimeout: 10000,
+      socketTimeout: 10000,
     });
 
     await transporter.sendMail({
@@ -52,12 +88,21 @@ export async function POST(req: Request) {
           <hr style="border: none; border-top: 1px solid #eee; margin: 20px 0;" />
           <p style="color: #999; font-size: 12px;">Enviado automaticamente pelo Simulicold.</p>
         </div>
-      `,
-    });
+      } catch (error: unknown) {
+        console.error('[FEEDBACK] Erro completo ao enviar e-mail:', serializeError(error));
 
-    return Response.json({ success: true, message: 'Feedback enviado com sucesso!' });
-  } catch (error: any) {
-    console.error('Erro ao enviar feedback:', error);
+        const errorMessage =
+          error instanceof Error && error.message
+            ? error.message
+            : 'Erro interno ao enviar feedback';
+
+        return Response.json(
+          {
+            success: false,
+            error: errorMessage,
+          },
+          { status: 500 }
+        );
     return new Response(
       error.message || 'Erro interno ao enviar feedback',
       { status: 500 }
