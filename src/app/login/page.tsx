@@ -193,6 +193,25 @@ function AuthContent() {
     const normalizedEmail = email.trim().toLowerCase();
 
     try {
+      const checkEmailResponse = await fetch('/api/auth/check-email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: normalizedEmail }),
+      });
+
+      if (!checkEmailResponse.ok) {
+        setErrorMsg('Não foi possível validar o e-mail agora. Tente novamente em instantes.');
+        return;
+      }
+
+      const checkEmailData = (await checkEmailResponse.json()) as { exists?: boolean };
+
+      if (checkEmailData.exists) {
+        setRegisterEmailError('Este e-mail já está registrado. Por favor, faça o login.');
+        setIsLogin(true);
+        return;
+      }
+
       const { error } = await supabase.auth.signUp({
         email: normalizedEmail,
         password,
