@@ -8,10 +8,10 @@ import { supabase } from '@/lib/supabase';
 export function Header() {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
-  const [creditBalance, setCreditBalance] = useState<number | null>(null);
+  const [credits, setCredits] = useState<number | string | null>(null);
 
   useEffect(() => {
-    async function loadAvatar() {
+    async function loadData() {
       const { data: authData } = await supabase.auth.getUser();
       if (authData?.user) {
         const { data: profileRow } = await supabase
@@ -23,18 +23,27 @@ export function Header() {
           setAvatarUrl(profileRow.avatar_url);
         }
 
+        if (authData.user.email === 'francojoao512@gmail.com') {
+          setCredits('♾️');
+          return;
+        }
+
         const { data: creditRow } = await supabase
           .from('user_credits')
           .select('balance')
-          .eq('user_uid', authData.user.id)
+          .eq('user_id', authData.user.id)
           .maybeSingle();
 
-        setCreditBalance(creditRow?.balance ?? 0);
+        if (creditRow) {
+          setCredits(creditRow.balance);
+        } else {
+          setCredits(0);
+        }
       }
     }
-    loadAvatar();
+    loadData();
 
-    const refreshInterval = setInterval(loadAvatar, 30000);
+    const refreshInterval = setInterval(loadData, 30000);
 
     const handleProfileUpdate = (event: Event) => {
       const profileEvent = event as CustomEvent<{ avatar_url?: string }>;
@@ -59,15 +68,17 @@ export function Header() {
       </div>
 
       <div className="flex items-center gap-6 text-sm text-foreground/80">
-        <div className="hidden sm:flex items-center gap-2 rounded-full border border-accent/30 bg-accent/10 px-3 py-1.5 text-accent font-semibold">
-          <span>🪙</span>
-          <span>{creditBalance ?? 0} créditos</span>
-        </div>
-
         <Link href="/history" className="flex items-center gap-2 hover:text-foreground transition-colors group cursor-pointer">
           <History className="w-5 h-5 group-hover:-rotate-45 transition-transform" />
           <span>Histórico</span>
         </Link>
+
+        {credits !== null && (
+          <div className="flex items-center gap-2 bg-blue-900/20 text-blue-400 px-3 py-1.5 rounded-full border border-blue-500/20 font-medium text-sm">
+            <span>🪙</span>
+            <span>{credits} {credits === '♾️' ? '' : 'Créditos'}</span>
+          </div>
+        )}
 
         {/* Menu de Configurações Dropdown */}
         <div className="relative">
