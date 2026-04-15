@@ -26,6 +26,33 @@ function getAuthorizationToken(request: Request): string | null {
   return token;
 }
 
+async function readUserBalanceSafely(
+  supabase: ReturnType<typeof createClient>,
+  userId: string
+): Promise<number | null> {
+  try {
+    const { data, error } = await supabase
+      .from('user_credits')
+      .select('balance')
+      .eq('user_id', userId)
+      .maybeSingle();
+
+    if (error) {
+      console.error('[TTS] Falha na leitura de creditos:', error);
+      return null;
+    }
+
+    if (!data || typeof data.balance !== 'number') {
+      return 0;
+    }
+
+    return data.balance;
+  } catch (error) {
+    console.error('[TTS] Excecao ao ler creditos:', error);
+    return null;
+  }
+}
+
 export async function POST(req: Request) {
   try {
     const body = await req.json();
@@ -55,21 +82,8 @@ export async function POST(req: Request) {
       });
     }
 
-    const { data: creditsRow, error: creditsError } = await supabase
-      .from('user_credits')
-      .select('balance')
-      .eq('user_uid', user.id)
-      .maybeSingle();
-
-    if (creditsError) {
-      console.error('[TTS] Erro ao verificar créditos:', creditsError);
-      return new Response(JSON.stringify({ error: 'Erro ao verificar créditos.' }), {
-        status: 500,
-        headers: { 'Content-Type': 'application/json' },
-      });
-    }
-
-    if ((creditsRow?.balance ?? 0) <= 0) {
+    const balance = await readUserBalanceSafely(supabase, user.id);
+    if (balance === null || balance <= 0) {
       return new Response(JSON.stringify({ error: 'Créditos esgotados' }), {
         status: 402,
         headers: { 'Content-Type': 'application/json' },

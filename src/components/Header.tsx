@@ -8,7 +8,7 @@ import { supabase } from '@/lib/supabase';
 export function Header() {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
-  const [credits, setCredits] = useState<number | string | null>(null);
+  const [credits, setCredits] = useState<number | null>(null);
 
   useEffect(() => {
     async function loadData() {
@@ -23,22 +23,13 @@ export function Header() {
           setAvatarUrl(profileRow.avatar_url);
         }
 
-        if (authData.user.email === 'francojoao512@gmail.com') {
-          setCredits('♾️');
-          return;
-        }
-
         const { data: creditRow } = await supabase
           .from('user_credits')
           .select('balance')
           .eq('user_id', authData.user.id)
           .maybeSingle();
 
-        if (creditRow) {
-          setCredits(creditRow.balance);
-        } else {
-          setCredits(0);
-        }
+        setCredits(creditRow?.balance ?? 0);
       }
     }
     loadData();
@@ -68,17 +59,15 @@ export function Header() {
       </div>
 
       <div className="flex items-center gap-6 text-sm text-foreground/80">
+        <div className="hidden sm:flex items-center gap-2 rounded-full border border-accent/30 bg-accent/10 px-3 py-1.5 text-accent font-semibold">
+          <span>🪙</span>
+          <span>{credits ?? 0} créditos</span>
+        </div>
+
         <Link href="/history" className="flex items-center gap-2 hover:text-foreground transition-colors group cursor-pointer">
           <History className="w-5 h-5 group-hover:-rotate-45 transition-transform" />
           <span>Histórico</span>
         </Link>
-
-        {credits !== null && (
-          <div className="flex items-center gap-2 bg-blue-900/20 text-blue-400 px-3 py-1.5 rounded-full border border-blue-500/20 font-medium text-sm">
-            <span>🪙</span>
-            <span>{credits} {credits === '♾️' ? '' : 'Créditos'}</span>
-          </div>
-        )}
 
         {/* Menu de Configurações Dropdown */}
         <div className="relative">

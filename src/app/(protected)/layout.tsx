@@ -2,7 +2,7 @@ import { createServerClient } from '@supabase/ssr';
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 
-const TEST_BYPASS_EMAIL = 'francojoao512@gmail.com';
+const DEV_BYPASS_EMAIL = 'francojoao512@gmail.com';
 
 export default async function ProtectedLayout({
   children,
@@ -34,32 +34,30 @@ export default async function ProtectedLayout({
     redirect('/login');
   }
 
-  if (user.email?.toLowerCase() === TEST_BYPASS_EMAIL) {
-    return <>{children}</>;
-  }
+  if (user.email?.toLowerCase() !== DEV_BYPASS_EMAIL) {
+    const { data: subscription } = await supabase
+      .from('subscriptions')
+      .select('status, current_period_end')
+      .eq('user_id', user.id)
+      .maybeSingle();
 
-  const { data: subscription } = await supabase
-    .from('subscriptions')
-    .select('status, current_period_end')
-    .eq('user_id', user.id)
-    .maybeSingle();
+    const isAuthorized =
+      subscription?.status === 'authorized' || subscription?.status === 'active';
+    let isValidPeriod = false;
 
-  const isAuthorized =
-    subscription?.status === 'authorized' || subscription?.status === 'active';
-  let isValidPeriod = false;
+    if (subscription?.current_period_end) {
+      isValidPeriod = new Date(subscription.current_period_end) > new Date();
+    }
 
-  if (subscription?.current_period_end) {
-    isValidPeriod = new Date(subscription.current_period_end) > new Date();
-  }
-
-  if (!subscription || !isAuthorized || !isValidPeriod) {
-    redirect('/checkout');
+    if (!subscription || !isAuthorized || !isValidPeriod) {
+      redirect('/checkout');
+    }
   }
 
   const { data: credits } = await supabase
     .from('user_credits')
     .select('balance')
-    .eq('user_uid', user.id)
+    .eq('user_id', user.id)
     .maybeSingle();
 
   if ((credits?.balance ?? 0) <= 0) {

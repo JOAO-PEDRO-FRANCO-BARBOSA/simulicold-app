@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { Mail, Lock, ArrowRight, UserPlus, AlertCircle, RefreshCw, Eye, EyeOff, Loader2 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 
-const TEST_BYPASS_EMAIL = 'francojoao512@gmail.com';
+const DEV_BYPASS_EMAIL = 'francojoao512@gmail.com';
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 const STRONG_PASSWORD_REGEX = /^(?=.*[A-Za-z])(?=.*\d).{8,}$/;
 
@@ -91,7 +91,7 @@ function AuthContent() {
     const { data: creditRow } = await supabase
       .from('user_credits')
       .select('balance')
-      .eq('user_uid', userId)
+      .eq('user_id', userId)
       .maybeSingle();
 
     return {
@@ -156,7 +156,7 @@ function AuthContent() {
       return;
     }
 
-    if (user.email?.toLowerCase() === TEST_BYPASS_EMAIL) {
+    if (user.email?.toLowerCase() === DEV_BYPASS_EMAIL) {
       router.push('/dashboard');
       return;
     }
