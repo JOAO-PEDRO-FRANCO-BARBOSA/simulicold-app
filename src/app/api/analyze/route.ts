@@ -5,7 +5,6 @@
 import { generateObject } from 'ai';
 import { google } from '@ai-sdk/google';
 import { z } from 'zod';
-import { createSupabaseServerClient } from '@/lib/supabase-server';
 
 export const runtime = 'edge';
 
@@ -25,7 +24,7 @@ const analysisSchema = z.object({
   }))
 });
 
-const BASE_SYSTEM_PROMPT = `Você é um Treinador Sênior "Black Belt" de vendas B2B com 20 anos de experiência em cold calls corporativas.
+const SYSTEM_PROMPT = `Você é um Treinador Sênior "Black Belt" de vendas B2B com 20 anos de experiência em cold calls corporativas.
 Sua especialidade é dissecar cada fala de um vendedor usando frameworks rigorosos de persuasão.
 
 Seus PILARES de avaliação (use TODOS):
@@ -48,36 +47,6 @@ Seus PILARES de avaliação (use TODOS):
 
 export async function POST(req: Request) {
   try {
-    const supabase = await createSupabaseServerClient();
-    const {
-      data: { user },
-      error: userError,
-    } = await supabase.auth.getUser();
-
-    if (userError || !user) {
-      return new Response('Não autenticado', { status: 401 });
-    }
-
-    let productContext: string | null = null;
-
-    const { data: profileRow, error: profileError } = await supabase
-      .from('profiles')
-      .select('product_context')
-      .eq('id', user.id)
-      .maybeSingle();
-
-    if (profileError) {
-      console.error('Erro ao buscar product_context:', profileError);
-    } else if (profileRow?.product_context && typeof profileRow.product_context === 'string') {
-      productContext = profileRow.product_context.trim();
-    }
-
-    const productContextPrompt = productContext
-      ? `\n\nCONTEXTO DO PRODUTO/SERVIÇO DO USUÁRIO:\nO usuário está simulando a venda do seguinte produto/serviço: ${productContext}. Avalie a performance dele baseando-se em quão bem ele apresentou o valor deste produto específico e lidou com objeções relacionadas a ele.`
-      : '';
-
-    const systemPrompt = `${BASE_SYSTEM_PROMPT}${productContextPrompt}`;
-
     const body = await req.json();
     const { messages } = body;
 
@@ -96,7 +65,7 @@ export async function POST(req: Request) {
       schema: analysisSchema,
       schemaName: 'SalesAnalysis',
       schemaDescription: 'Análise estruturada de uma simulação de cold call B2B',
-      system: systemPrompt,
+      system: SYSTEM_PROMPT,
       prompt: `Analise a seguinte transcrição de cold call B2B e forneça sua avaliação detalhada:\n\n${transcriptText}`,
       temperature: 0.2, // Temperatura baixa: respostas determinísticas e rápidas
     });

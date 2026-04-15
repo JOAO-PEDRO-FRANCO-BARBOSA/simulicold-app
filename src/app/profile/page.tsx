@@ -7,7 +7,7 @@ import { User, Mail, ChevronLeft, CreditCard, Shield, Award, Loader2 } from 'luc
 import { supabase } from '@/lib/supabase';
 
 export default function ProfilePage() {
-  const [profile, setProfile] = useState<{ fullName: string, email: string, subStatus: string, avatarUrl: string, productContext: string } | null>(null);
+  const [profile, setProfile] = useState<{ fullName: string, email: string, subStatus: string, avatarUrl: string } | null>(null);
   const [avatarFile, setAvatarFile] = useState<File | null>(null);
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -23,20 +23,15 @@ export default function ProfilePage() {
         // 2. Com o user.id, puxar os metadados e os campos da tabela public.profiles
         const { data: profileRow, error } = await supabase
           .from('profiles')
-          .select('full_name, subscription_status, avatar_url, product_context')
+          .select('full_name, subscription_status, avatar_url')
           .eq('id', authData.user.id)
-          .maybeSingle();
-
-        if (error) {
-          console.error('Erro ao carregar perfil:', error);
-        }
+          .single();
 
         setProfile({
           email: authData.user.email || 'Não encontrado',
           fullName: profileRow?.full_name || 'Vendedor Autenticado',
           subStatus: profileRow?.subscription_status === 'pro' ? 'PRO' : 'FREE',
-          avatarUrl: profileRow?.avatar_url || '',
-          productContext: profileRow?.product_context || ''
+          avatarUrl: profileRow?.avatar_url || ''
         });
         if (profileRow?.avatar_url) {
           setAvatarPreview(profileRow.avatar_url);
@@ -78,14 +73,11 @@ export default function ProfilePage() {
 
     const { error: updateError } = await supabase
       .from('profiles')
-      .upsert({
-        id: authData.user.id,
+      .update({
         full_name: profile.fullName,
-        avatar_url: updatedAvatarUrl,
-        product_context: profile.productContext,
-      }, {
-        onConflict: 'id',
-      });
+        avatar_url: updatedAvatarUrl
+      })
+      .eq('id', authData.user.id);
 
     if (!updateError) {
       setSuccessMsg("Perfil salvo com sucesso!");
@@ -152,27 +144,15 @@ export default function ProfilePage() {
                 <p className="flex items-center gap-2 text-foreground/60 mt-2 font-mono text-sm">
                    <Mail className="w-4 h-4" /> {profile?.email}
                 </p>
-                <div className="w-full mt-6">
-                  <label className="block text-sm font-semibold text-foreground/80 mb-2">
-                    Contexto do Produto/Serviço
-                  </label>
-                  <textarea
-                    value={profile?.productContext || ''}
-                    onChange={(e) => setProfile(p => p ? { ...p, productContext: e.target.value } : null)}
-                    placeholder="Ex: Vendo um software de gestão para clínicas médicas. O ticket médio é R$ 500/mês. As principais objeções são preço e tempo de implantação..."
-                    className="w-full min-h-[140px] rounded-xl border border-border bg-background/70 text-foreground placeholder:text-foreground/40 p-4 outline-none focus:border-accent/70 focus:ring-1 focus:ring-accent/30 transition-colors resize-y"
-                  />
-                </div>
                 <div className="mt-4 w-full flex justify-center md:justify-start">
                    <div className="flex items-center gap-4">
                      <button 
                        onClick={handleSave} 
                        disabled={saving}
-                       aria-busy={saving}
                        className="bg-accent text-accent-foreground font-bold py-2 px-6 rounded-xl hover:brightness-110 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
                      >
                        {saving && <Loader2 className="w-4 h-4 animate-spin" />}
-                       {saving ? 'Salvando...' : 'Salvar Alterações'}
+                       {saving ? 'Salvando...' : 'Salvar Perfil'}
                      </button>
                      {successMsg && <span className="text-green-500 text-sm font-medium animate-in fade-in">{successMsg}</span>}
                    </div>
