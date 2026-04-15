@@ -16,6 +16,7 @@ function AuthContent() {
   const [isLogin, setIsLogin] = useState(() => {
     return !searchParams.has('register');
   });
+  const [isRecovering, setIsRecovering] = useState(false);
 
   // States
   const [email, setEmail] = useState('');
@@ -281,8 +282,45 @@ function AuthContent() {
     }
   };
 
+  const handlePasswordRecovery = async (e: React.FormEvent) => {
+    e.preventDefault();
+    clearAllErrors();
+
+    const emailValidationError = validateEmail(email);
+    if (emailValidationError) {
+      setLoginEmailError(emailValidationError);
+      return;
+    }
+
+    setLoading(true);
+
+    try {
+      const redirectTo = `${window.location.origin}/auth/callback?next=/reset-password`;
+      const { error } = await supabase.auth.resetPasswordForEmail(
+        email.trim().toLowerCase(),
+        { redirectTo }
+      );
+
+      if (error) {
+        setErrorMsg(error.message);
+        return;
+      }
+
+      setSuccessMsg('Se este e-mail estiver cadastrado, você receberá um link em instantes.');
+    } catch (error) {
+      setErrorMsg(
+        error instanceof Error
+          ? error.message
+          : 'Nao foi possivel enviar o link de recuperacao agora. Tente novamente.'
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const toggleMode = (loginMode: boolean) => {
     setIsLogin(loginMode);
+    setIsRecovering(false);
     clearAllErrors();
     setRegistrationSuccess(false);
   };
@@ -299,11 +337,19 @@ function AuthContent() {
               <img src="/SIMULICOLD_LOGO.png" alt="Simulicold" className="h-20 sm:h-24 w-auto object-contain" />
             </div>
             <h2 className="text-3xl font-serif font-bold text-foreground text-center">
-              {registrationSuccess ? 'Conta Criada!' : isLogin ? 'Bem-vindo!' : 'Crie sua conta'}
+              {registrationSuccess
+                ? 'Conta Criada!'
+                : isRecovering
+                  ? 'Recuperar Senha'
+                  : isLogin
+                    ? 'Bem-vindo!'
+                    : 'Crie sua conta'}
             </h2>
             <p className="text-foreground/50 text-sm mt-2 text-center">
               {registrationSuccess 
                 ? 'Verifique seu e-mail para confirmar a conta.' 
+                : isRecovering
+                  ? 'Informe seu e-mail para receber o link de recuperacao.'
                 : isLogin 
                   ? 'Insira suas credenciais para acessar o simulador.' 
                   : 'Junte-se à plataforma número 1 de treinamento B2B.'}
@@ -366,7 +412,9 @@ function AuthContent() {
                 <form 
                   onSubmit={handleLogin}
                   className={`flex flex-col gap-5 transition-all duration-500 ease-in-out ${
-                    isLogin ? 'opacity-100 translate-x-0 relative' : 'opacity-0 absolute inset-0 pointer-events-none -translate-x-10'
+                    isLogin && !isRecovering
+                      ? 'opacity-100 translate-x-0 relative'
+                      : 'opacity-0 absolute inset-0 pointer-events-none -translate-x-10'
                   }`}
                 >
                   <div className="space-y-4">
@@ -414,7 +462,15 @@ function AuthContent() {
                       </div>
                       {loginPasswordError && <p className="text-red-500 text-sm mt-1">{loginPasswordError}</p>}
                       <div className="flex justify-end mt-2">
-                        <button type="button" className="text-xs text-accent/80 hover:text-accent font-semibold transition-colors cursor-pointer">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setIsRecovering(true);
+                            clearAllErrors();
+                            setLoginPasswordError('');
+                          }}
+                          className="text-xs text-accent/80 hover:text-accent font-semibold transition-colors cursor-pointer"
+                        >
                           Esqueci minha senha
                         </button>
                       </div>
@@ -431,11 +487,53 @@ function AuthContent() {
                   </button>
                 </form>
 
+                {/* FORMULÁRIO DE RECUPERAÇÃO */}
+                <form
+                  onSubmit={handlePasswordRecovery}
+                  className={`flex flex-col gap-5 transition-all duration-500 ease-in-out ${
+                    isRecovering
+                      ? 'opacity-100 translate-x-0 relative'
+                      : 'opacity-0 absolute inset-0 pointer-events-none -translate-x-10'
+                  }`}
+                >
+                  <div className="space-y-4">
+                    <div>
+                      <label className="text-xs font-bold uppercase tracking-wider text-foreground/70 mb-2 block ml-1">E-mail</label>
+                      <div className="relative">
+                        <Mail className="w-5 h-5 absolute left-4 top-1/2 -translate-y-1/2 text-foreground/40" />
+                        <input
+                          type="email"
+                          placeholder="seu@email.com"
+                          value={email}
+                          onChange={(e) => {
+                            setEmail(e.target.value);
+                            setLoginEmailError('');
+                          }}
+                          className="w-full bg-background border border-border/60 text-foreground text-sm rounded-xl py-3.5 pl-12 pr-4 focus:outline-none focus:border-accent/50 focus:ring-1 focus:ring-accent/50 transition-all placeholder:text-foreground/30 autofill:shadow-[inset_0_0_0_1000px_var(--background)] autofill:[-webkit-text-fill-color:var(--foreground)]"
+                          required
+                        />
+                      </div>
+                      {loginEmailError && <p className="text-red-500 text-sm mt-1">{loginEmailError}</p>}
+                    </div>
+                  </div>
+
+                  <button
+                    type="submit"
+                    disabled={loading}
+                    className="w-full bg-primary hover:bg-primary-hover text-white py-3.5 rounded-xl font-bold transition-transform hover:-translate-y-0.5 active:translate-y-0 shadow-lg shadow-primary/20 flex items-center justify-center gap-2 mt-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {loading ? 'Enviando...' : 'Enviar link de recuperação'}
+                    {!loading && <ArrowRight className="w-4 h-4" />}
+                  </button>
+                </form>
+
                 {/* FORMULÁRIO DE CADASTRO */}
                 <form 
                   onSubmit={handleRegister}
                   className={`flex flex-col gap-5 transition-all duration-500 ease-in-out ${
-                    !isLogin ? 'opacity-100 translate-x-0 relative' : 'opacity-0 absolute inset-0 pointer-events-none translate-x-10'
+                    !isLogin && !isRecovering
+                      ? 'opacity-100 translate-x-0 relative'
+                      : 'opacity-0 absolute inset-0 pointer-events-none translate-x-10'
                   }`}
                 >
                   <div className="space-y-4">
@@ -529,7 +627,22 @@ function AuthContent() {
         {/* Rodapé Alternador do Modal - Some quando o cadastro da certo */}
         {!registrationSuccess && (
           <div className="bg-background border-t border-border/50 p-6 flex justify-center">
-            {isLogin ? (
+            {isRecovering ? (
+              <p className="text-sm text-foreground/60">
+                Lembrou sua senha?{' '}
+                <button
+                  onClick={() => {
+                    setIsRecovering(false);
+                    setIsLogin(true);
+                    clearAllErrors();
+                  }}
+                  disabled={loading}
+                  className="text-primary hover:text-primary-hover font-bold hover:underline underline-offset-4 pointer-events-auto cursor-pointer"
+                >
+                  Voltar para o login
+                </button>
+              </p>
+            ) : isLogin ? (
               <p className="text-sm text-foreground/60">
                 Ainda não tem conta?{' '}
                 <button 

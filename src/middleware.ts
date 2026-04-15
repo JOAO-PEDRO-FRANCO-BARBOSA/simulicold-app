@@ -56,6 +56,7 @@ export const config = {
     '/history/:path*',
     '/analysis/:path*',
     '/profile/:path*',
+    '/reset-password',
     '/simulador/:path*',
     '/api/checkout'
   ],
