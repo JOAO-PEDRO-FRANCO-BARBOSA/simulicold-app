@@ -60,16 +60,16 @@ export async function POST(req: Request) {
 
     let productContext = '';
 
-    const { data: profileRow, error: profileError } = await supabase
-      .from('profiles')
+    const { data: userPreferencesRow, error: userPreferencesError } = await supabase
+      .from('user_preferences')
       .select('product_context')
-      .eq('id', user.id)
+      .eq('user_id', user.id)
       .maybeSingle();
 
-    if (profileError) {
-      console.error('Erro ao buscar product_context:', profileError);
-    } else if (typeof profileRow?.product_context === 'string') {
-      productContext = profileRow.product_context.trim();
+    if (userPreferencesError) {
+      console.error('Erro ao buscar product_context em user_preferences:', userPreferencesError);
+    } else if (typeof userPreferencesRow?.product_context === 'string') {
+      productContext = userPreferencesRow.product_context.trim();
     }
 
     const contextualInstruction = productContext.length > 0

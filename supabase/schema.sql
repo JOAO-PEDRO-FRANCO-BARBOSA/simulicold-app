@@ -45,6 +45,15 @@ CREATE TABLE public.simulations (
 );
 
 --------------------------------------------------------------------------------
+-- 4. TABELA DE PREFERÊNCIAS DO USUÁRIO
+--------------------------------------------------------------------------------
+CREATE TABLE public.user_preferences (
+  user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE NOT NULL PRIMARY KEY,
+  product_context TEXT,
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+--------------------------------------------------------------------------------
 -- POLÍTICAS DE ROW LEVEL SECURITY (RLS)
 --------------------------------------------------------------------------------
 
@@ -52,6 +61,7 @@ CREATE TABLE public.simulations (
 ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.personas ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.simulations ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.user_preferences ENABLE ROW LEVEL SECURITY;
 
 -- Profiles: O usuário só pode ler e alterar o seu próprio perfil
 CREATE POLICY "Usuários podem ver o próprio perfil" 
@@ -70,6 +80,18 @@ CREATE POLICY "Usuários autenticados podem ler personas"
 -- Simulations: O usuário tem controle total (CRUD) apenas sobre as próprias simulações arquivadas
 CREATE POLICY "Usuários têm controle total sobre suas próprias simulações" 
   ON public.simulations FOR ALL 
+  USING (auth.uid() = user_id);
+
+CREATE POLICY "Usuários podem ver suas próprias preferências"
+  ON public.user_preferences FOR SELECT
+  USING (auth.uid() = user_id);
+
+CREATE POLICY "Usuários podem inserir suas próprias preferências"
+  ON public.user_preferences FOR INSERT
+  WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY "Usuários podem atualizar suas próprias preferências"
+  ON public.user_preferences FOR UPDATE
   USING (auth.uid() = user_id);
 
 --------------------------------------------------------------------------------

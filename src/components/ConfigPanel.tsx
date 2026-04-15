@@ -37,11 +37,32 @@ export function ConfigPanel({ onPersonaSelect, onDifficultySelect }: ConfigPanel
   const [personas, setPersonas] = useState<any[]>([]);
   const [selectedScenario, setSelectedScenario] = useState('');
   const [selectedDifficulty, setSelectedDifficulty] = useState('medio');
+  const [productContext, setProductContext] = useState('');
+  const [userId, setUserId] = useState<string | null>(null);
+  const [savingPreferences, setSavingPreferences] = useState(false);
+  const [saveMessage, setSaveMessage] = useState('');
   const [loading, setLoading] = useState(true);
 
   // Fetch das personas via Supabase Client no Mount
   useEffect(() => {
     async function fetchPersonas() {
+      const { data: authData } = await supabase.auth.getUser();
+      if (authData?.user) {
+        setUserId(authData.user.id);
+
+        const { data: userPreferences, error: userPreferencesError } = await supabase
+          .from('user_preferences')
+          .select('product_context')
+          .eq('user_id', authData.user.id)
+          .maybeSingle();
+
+        if (userPreferencesError) {
+          console.error('Erro ao buscar preferências do usuário:', userPreferencesError);
+        } else if (typeof userPreferences?.product_context === 'string') {
+          setProductContext(userPreferences.product_context);
+        }
+      }
+
       const { data, error } = await supabase.from('personas').select('*');
       if (error) {
         console.error('Erro ao buscar personas:', error);
@@ -56,6 +77,42 @@ export function ConfigPanel({ onPersonaSelect, onDifficultySelect }: ConfigPanel
     }
     fetchPersonas();
   }, [onPersonaSelect, onDifficultySelect]);
+
+  const handleSavePreferences = async () => {
+    if (!userId) {
+      setSaveMessage('Você precisa estar autenticado para salvar.');
+      setTimeout(() => setSaveMessage(''), 3000);
+      return;
+    }
+
+    setSavingPreferences(true);
+    setSaveMessage('');
+
+    const contextToSave = productContext.trim();
+
+    const { error } = await supabase
+      .from('user_preferences')
+      .upsert(
+        {
+          user_id: userId,
+          product_context: contextToSave,
+          updated_at: new Date().toISOString(),
+        },
+        {
+          onConflict: 'user_id',
+        }
+      );
+
+    if (error) {
+      console.error('Erro ao salvar preferências:', error);
+      setSaveMessage('Falha ao salvar. Tente novamente.');
+    } else {
+      setSaveMessage('Preferências salvas com sucesso!');
+    }
+
+    setSavingPreferences(false);
+    setTimeout(() => setSaveMessage(''), 3000);
+  };
 
   const handlePersonaClick = (id: string) => {
     setSelectedScenario(id);
@@ -149,6 +206,32 @@ export function ConfigPanel({ onPersonaSelect, onDifficultySelect }: ConfigPanel
             })}
           </div>
         )}
+      </div>
+
+      {/* Product Context */}
+      <div className="flex flex-col gap-3">
+        <h3 className="text-sm font-medium text-foreground/60 uppercase tracking-wider">Contexto do Produto/Serviço</h3>
+        <textarea
+          value={productContext}
+          onChange={(e) => setProductContext(e.target.value)}
+          placeholder="Ex: Vendo um software de gestão para clínicas médicas. O ticket médio é R$ 500/mês. As principais objeções são preço e tempo de implantação..."
+          className="w-full min-h-[120px] rounded-xl border border-border bg-background/70 text-foreground placeholder:text-foreground/40 p-4 outline-none focus:border-accent/70 focus:ring-1 focus:ring-accent/30 transition-colors resize-y"
+        />
+        <div className="flex items-center gap-3">
+          <button
+            onClick={handleSavePreferences}
+            disabled={savingPreferences || !userId}
+            aria-busy={savingPreferences}
+            className="bg-accent text-accent-foreground font-bold py-2 px-5 rounded-xl hover:brightness-110 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {savingPreferences ? 'Salvando...' : 'Salvar Alterações'}
+          </button>
+          {saveMessage && (
+            <span className={`text-xs font-medium ${saveMessage.includes('sucesso') ? 'text-green-500' : 'text-red-400'}`}>
+              {saveMessage}
+            </span>
+          )}
+        </div>
       </div>
 
       {/* Difficulty Selection */}
