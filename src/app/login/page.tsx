@@ -70,16 +70,34 @@ function AuthContent() {
   // HELPERS
   // ─────────────────────────────────────────────────────────────────────────────
 
-  const checkSubscription = async (userId: string): Promise<boolean> => {
+  const checkSubscriptionAndCredits = async (userId: string): Promise<{ hasSubscription: boolean; hasCredits: boolean }> => {
     const { data: subscription } = await supabase
       .from('subscriptions')
-      .select('status')
+      .select('status, current_period_end')
       .eq('user_id', userId)
       .maybeSingle();
 
-    if (!subscription) return false;
+    if (!subscription) return { hasSubscription: false, hasCredits: false };
 
-    return subscription.status === 'authorized' || subscription.status === 'active';
+    const isAuthorized = subscription.status === 'authorized' || subscription.status === 'active';
+    const isValidPeriod = subscription.current_period_end
+      ? new Date(subscription.current_period_end) > new Date()
+      : false;
+
+    if (!isAuthorized || !isValidPeriod) {
+      return { hasSubscription: false, hasCredits: false };
+    }
+
+    const { data: creditRow } = await supabase
+      .from('user_credits')
+      .select('balance')
+      .eq('user_uid', userId)
+      .maybeSingle();
+
+    return {
+      hasSubscription: true,
+      hasCredits: (creditRow?.balance ?? 0) > 0,
+    };
   };
 
   // ─────────────────────────────────────────────────────────────────────────────
@@ -144,11 +162,16 @@ function AuthContent() {
     }
 
     // Passo A: Checar assinatura
-    const hasValidSubscription = await checkSubscription(user.id);
+    const accessStatus = await checkSubscriptionAndCredits(user.id);
 
     // Passo B: Se VÁLIDA → Dashboard
-    if (hasValidSubscription) {
+    if (accessStatus.hasSubscription && accessStatus.hasCredits) {
       router.push('/dashboard');
+      return;
+    }
+
+    if (accessStatus.hasSubscription && !accessStatus.hasCredits) {
+      router.push('/checkout-addon');
       return;
     }
 

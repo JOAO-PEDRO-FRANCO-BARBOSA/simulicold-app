@@ -16,20 +16,20 @@ const PLANS: Array<{
   {
     id: 'mensal',
     name: 'Mensal',
-    price: 'R$ 60',
+    price: 'R$ 247',
     description: 'Renovação mensal com flexibilidade para testar e provar valor rapidamente.',
   },
   {
     id: 'trimestral',
     name: 'Trimestral',
-    price: 'R$ 170',
+    price: 'R$ 597',
     description: 'Acesso total por 3 meses com equilíbrio entre custo e continuidade.',
     featured: true,
   },
   {
     id: 'semestral',
     name: 'Semestral',
-    price: 'R$ 335',
+    price: 'R$ 997',
     description: 'Acesso completo por 6 meses para equipes que querem escala com previsibilidade.',
   },
 ];

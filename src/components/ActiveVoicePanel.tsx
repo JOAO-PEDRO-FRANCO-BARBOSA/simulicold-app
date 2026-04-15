@@ -6,6 +6,7 @@ import { supabase } from '@/lib/supabase';
 
 interface Props {
   onEnd: () => void;
+  onUpsellRequired: (message: string) => void;
   userId: string;
   personaId: string;
   difficulty: string;
@@ -13,7 +14,7 @@ interface Props {
   setMessages: React.Dispatch<React.SetStateAction<{ role: string, content: string }[]>>;
 }
 
-export function ActiveVoicePanel({ onEnd, userId, personaId, difficulty, messages, setMessages }: Props) {
+export function ActiveVoicePanel({ onEnd, onUpsellRequired, userId, personaId, difficulty, messages, setMessages }: Props) {
   const [timeLeft, setTimeLeft] = useState(300);
   const [waveHeights, setWaveHeights] = useState([6, 6, 6, 6, 6]);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -49,6 +50,16 @@ export function ActiveVoicePanel({ onEnd, userId, personaId, difficulty, message
     const m = Math.floor(seconds / 60);
     const s = seconds % 60;
     return `${m}:${s.toString().padStart(2, '0')}`;
+  };
+
+  const getAuthHeaders = async () => {
+    const { data } = await supabase.auth.getSession();
+    const token = data.session?.access_token;
+
+    return {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    };
   };
 
   // ===================================================================
@@ -90,9 +101,18 @@ export function ActiveVoicePanel({ onEnd, userId, personaId, difficulty, message
       // 1. Buscar áudio da ElevenLabs via nossa rota /api/tts
       const ttsResponse = await fetch('/api/tts', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: await getAuthHeaders(),
         body: JSON.stringify({ text, personaId }),
       });
+
+      if (ttsResponse.status === 402) {
+        const payload = await ttsResponse.json().catch(() => ({ error: 'Créditos esgotados' }));
+        onUpsellRequired(payload.error || 'Créditos esgotados');
+        isSpeakingRef.current = false;
+        isFetchingRef.current = false;
+        setIsProcessing(false);
+        return;
+      }
 
       if (!ttsResponse.ok) {
         const errMsg = await ttsResponse.text();
@@ -191,7 +211,7 @@ export function ActiveVoicePanel({ onEnd, userId, personaId, difficulty, message
       // ── ETAPA 1: Obter resposta da persona (PRIORIDADE MÁXIMA) ──
       const response = await fetch('/api/chat', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: await getAuthHeaders(),
         body: JSON.stringify({
           messages: newMessages,
           persona_id: personaId,
@@ -199,9 +219,19 @@ export function ActiveVoicePanel({ onEnd, userId, personaId, difficulty, message
         })
       });
 
+      if (response.status === 402) {
+        const payload = await response.json().catch(() => ({ error: 'Créditos esgotados' }));
+        onUpsellRequired(payload.error || 'Créditos esgotados');
+        isFetchingRef.current = false;
+        setIsProcessing(false);
+        startRecognition();
+        return;
+      }
+
       if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(errorText || `Erro na API (status ${response.status})`);
+        const payload = await response.json().catch(() => null);
+        const errorText = payload?.error || `Erro na API (status ${response.status})`;
+        throw new Error(errorText);
       }
 
       const data = await response.json();

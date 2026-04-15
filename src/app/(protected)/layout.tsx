@@ -56,5 +56,15 @@ export default async function ProtectedLayout({
     redirect('/checkout');
   }
 
+  const { data: credits } = await supabase
+    .from('user_credits')
+    .select('balance')
+    .eq('user_uid', user.id)
+    .maybeSingle();
+
+  if ((credits?.balance ?? 0) <= 0) {
+    redirect('/checkout-addon');
+  }
+
   return <>{children}</>;
 }

@@ -8,6 +8,7 @@ import { ActiveVoicePanel } from '@/components/ActiveVoicePanel';
 import { TranscriptionPanel } from '@/components/TranscriptionPanel';
 import { SupportPopup } from '@/components/SupportPopup';
 import { EndCallModal } from '@/components/EndCallModal';
+import { CreditsUpsellModal } from '@/components/CreditsUpsellModal';
 import { supabase } from '@/lib/supabase';
 
 export default function Dashboard() {
@@ -21,6 +22,13 @@ export default function Dashboard() {
 
   // Mensagens da Conversa (STT / Gemini)
   const [messages, setMessages] = useState<{ role: string, content: string }[]>([]);
+  const [upsellModalOpen, setUpsellModalOpen] = useState(false);
+  const [upsellMessage, setUpsellMessage] = useState('Créditos esgotados');
+
+  const handleUpsellRequired = (message: string) => {
+    setUpsellMessage(message);
+    setUpsellModalOpen(true);
+  };
 
   useEffect(() => {
     // Tenta pegar a sessão atual limpa do Auth
@@ -47,6 +55,7 @@ export default function Dashboard() {
             ) : (
               <ActiveVoicePanel 
                 onEnd={() => setCallState('ended')} 
+                onUpsellRequired={handleUpsellRequired}
                 personaId={selectedPersonaId}
                 difficulty={selectedDifficulty}
                 userId={userId}
@@ -78,6 +87,12 @@ export default function Dashboard() {
       {callState === 'ended' && (
         <EndCallModal onRetry={() => setCallState('idle')} />
       )}
+
+      <CreditsUpsellModal
+        isOpen={upsellModalOpen}
+        message={upsellMessage}
+        onClose={() => setUpsellModalOpen(false)}
+      />
     </div>
   );
 }

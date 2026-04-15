@@ -58,6 +58,7 @@ export const config = {
     '/profile/:path*',
     '/reset-password',
     '/simulador/:path*',
-    '/api/checkout'
+    '/api/checkout',
+    '/api/checkout-addon'
   ],
 };

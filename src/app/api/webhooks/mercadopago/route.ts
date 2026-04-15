@@ -1,6 +1,42 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { preApprovalClient, PLANS, PlanType } from '@/lib/mercadopago';
+import { ADDON_PACKAGES, paymentClient, PLANS, PlanType, preApprovalClient } from '@/lib/mercadopago';
 import { createSupabaseAdminClient } from '@/lib/supabase-server';
+
+type WebhookBody = {
+  type?: string;
+  data?: { id?: string };
+  id?: string;
+};
+
+async function addCreditsToUser(
+  userId: string,
+  amount: number,
+  supabaseAdmin = createSupabaseAdminClient()
+) {
+  const { data: currentCredits, error: readError } = await supabaseAdmin
+    .from('user_credits')
+    .select('balance')
+    .eq('user_uid', userId)
+    .maybeSingle();
+
+  if (readError && readError.code !== 'PGRST116') {
+    return { error: readError };
+  }
+
+  const nextBalance = Math.max(0, (currentCredits?.balance ?? 0) + amount);
+
+  return supabaseAdmin
+    .from('user_credits')
+    .upsert(
+      {
+        user_uid: userId,
+        balance: nextBalance,
+      },
+      {
+        onConflict: 'user_uid',
+      }
+    );
+}
 
 /**
  * Rota pública — chamada automaticamente pelo Mercado Pago via IPN/Webhook.
@@ -11,12 +47,42 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     console.log('[WEBHOOK MP] Notificação recebida:', JSON.stringify(body));
 
-    // Mercado Pago envia type + data.id
-    const { type, data } = body as {
-      type: string;
-      data?: { id?: string };
-      id?: string;
-    };
+    const { type, data } = body as WebhookBody;
+
+    if (!type) {
+      return NextResponse.json({ status: 'ignored' }, { status: 200 });
+    }
+
+    // Processamento de pagamentos únicos (pacote avulso)
+    if (type === 'payment') {
+      const paymentId = data?.id;
+      if (!paymentId) {
+        return NextResponse.json({ status: 'ignored' }, { status: 200 });
+      }
+
+      const payment = await paymentClient.get({ id: paymentId });
+      if (payment.status !== 'approved') {
+        return NextResponse.json({ success: true }, { status: 200 });
+      }
+
+      const userId = payment.external_reference;
+      if (!userId) {
+        console.error('[WEBHOOK MP] payment aprovado sem external_reference:', paymentId);
+        return NextResponse.json({ status: 'ignored' }, { status: 200 });
+      }
+
+      const supabaseAdmin = createSupabaseAdminClient();
+      const addonCredits = ADDON_PACKAGES['creditos-20'].credits;
+      const { error: creditError } = await addCreditsToUser(userId, addonCredits, supabaseAdmin);
+
+      if (creditError) {
+        console.error('[WEBHOOK MP] Erro ao somar créditos avulsos:', creditError);
+        return NextResponse.json({ error: 'Erro ao creditar pacote avulso.' }, { status: 500 });
+      }
+
+      console.log(`[WEBHOOK MP] +${addonCredits} créditos aplicados para user ${userId} (payment ${paymentId})`);
+      return NextResponse.json({ success: true }, { status: 200 });
+    }
 
     // Aceitar tanto IPN (type=preapproval) quanto notificações antigas (id direto)
     if (type !== 'preapproval' && type !== 'subscription_preapproval') {
@@ -97,7 +163,15 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Erro ao salvar assinatura.' }, { status: 500 });
     }
 
-    console.log(`[WEBHOOK MP] Assinatura ${planType} ativada para user ${userId}`);
+    const rechargeCredits = PLANS[planType].monthlyCredits;
+    const { error: creditsError } = await addCreditsToUser(userId, rechargeCredits, supabaseAdmin);
+
+    if (creditsError) {
+      console.error('[WEBHOOK MP] Erro ao recarregar créditos da assinatura:', creditsError);
+      return NextResponse.json({ error: 'Erro ao recarregar créditos.' }, { status: 500 });
+    }
+
+    console.log(`[WEBHOOK MP] Assinatura ${planType} ativada para user ${userId} (+${rechargeCredits} créditos)`);
     return NextResponse.json({ success: true }, { status: 200 });
   } catch (error: unknown) {
     console.error('[WEBHOOK MP] Erro não tratado:', error);

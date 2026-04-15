@@ -19,7 +19,7 @@ const PLANS: Plan[] = [
   {
     id: 'semestral',
     label: 'Semestral',
-    price: 'R$ 335',
+    price: 'R$ 997',
     description:
       'Acesso completo por 6 meses. Ideal para equipes escalando suas operações com máxima eficiência no pagamento a termo.',
     highlight: false,
@@ -28,7 +28,7 @@ const PLANS: Plan[] = [
   {
     id: 'trimestral',
     label: 'Trimestral',
-    price: 'R$ 170',
+    price: 'R$ 597',
     description:
       'Acesso total por 3 meses. Compromisso balanceado garantindo evolução contínua.',
     highlight: true,
@@ -37,7 +37,7 @@ const PLANS: Plan[] = [
   {
     id: 'mensal',
     label: 'Mensal',
-    price: 'R$ 60',
+    price: 'R$ 247',
     description:
       'Renovação mensal garantindo flexibilidade para quem quer testar e provar o valor.',
     highlight: false,

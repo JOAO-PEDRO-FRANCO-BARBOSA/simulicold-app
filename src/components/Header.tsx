@@ -2,12 +2,13 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { History, Settings, PhoneForwarded, User, LogOut } from 'lucide-react';
+import { History, User, LogOut } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 
 export function Header() {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
+  const [creditBalance, setCreditBalance] = useState<number | null>(null);
 
   useEffect(() => {
     async function loadAvatar() {
@@ -21,18 +22,32 @@ export function Header() {
         if (profileRow?.avatar_url) {
           setAvatarUrl(profileRow.avatar_url);
         }
+
+        const { data: creditRow } = await supabase
+          .from('user_credits')
+          .select('balance')
+          .eq('user_uid', authData.user.id)
+          .maybeSingle();
+
+        setCreditBalance(creditRow?.balance ?? 0);
       }
     }
     loadAvatar();
 
-    const handleProfileUpdate = (e: any) => {
-      if (e.detail?.avatar_url) {
-        setAvatarUrl(e.detail.avatar_url);
+    const refreshInterval = setInterval(loadAvatar, 30000);
+
+    const handleProfileUpdate = (event: Event) => {
+      const profileEvent = event as CustomEvent<{ avatar_url?: string }>;
+      if (profileEvent.detail?.avatar_url) {
+        setAvatarUrl(profileEvent.detail.avatar_url);
       }
     };
 
     window.addEventListener('profileUpdated', handleProfileUpdate);
-    return () => window.removeEventListener('profileUpdated', handleProfileUpdate);
+    return () => {
+      clearInterval(refreshInterval);
+      window.removeEventListener('profileUpdated', handleProfileUpdate);
+    };
   }, []);
 
   return (
@@ -44,6 +59,11 @@ export function Header() {
       </div>
 
       <div className="flex items-center gap-6 text-sm text-foreground/80">
+        <div className="hidden sm:flex items-center gap-2 rounded-full border border-accent/30 bg-accent/10 px-3 py-1.5 text-accent font-semibold">
+          <span>🪙</span>
+          <span>{creditBalance ?? 0} créditos</span>
+        </div>
+
         <Link href="/history" className="flex items-center gap-2 hover:text-foreground transition-colors group cursor-pointer">
           <History className="w-5 h-5 group-hover:-rotate-45 transition-transform" />
           <span>Histórico</span>
