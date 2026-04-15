@@ -4,10 +4,33 @@ import { Phone, Sparkles, MessageSquare } from 'lucide-react';
 
 interface Props {
   onStart: () => void;
-  disabled?: boolean;
+  onUpsellRequired: (message: string) => void;
+  hasPersona: boolean;
+  credits: number | null;
 }
 
-export function CallPanelIdle({ onStart, disabled }: Props) {
+export function CallPanelIdle({ onStart, onUpsellRequired, hasPersona, credits }: Props) {
+  const isCreditsReady = credits !== null;
+  const isCreditBlocked = isCreditsReady && credits <= 0;
+  const isBlocked = !hasPersona || !isCreditsReady || isCreditBlocked;
+
+  const handleStartClick = () => {
+    if (!hasPersona) {
+      return;
+    }
+
+    if (!isCreditsReady) {
+      return;
+    }
+
+    if (isCreditBlocked) {
+      onUpsellRequired('Limite atingido!');
+      return;
+    }
+
+    onStart();
+  };
+
   return (
     <div className="flex flex-col h-full gap-4">
       {/* Call Main Area (Pré-chamada) */}
@@ -28,11 +51,11 @@ export function CallPanelIdle({ onStart, disabled }: Props) {
           <p className="text-foreground/50 mb-10 text-sm">Clique no botão para simular a ligação</p>
 
           <button 
-            onClick={onStart}
-            disabled={disabled}
-            title={disabled ? 'Selecione um perfil de cliente antes de iniciar' : undefined}
+            onClick={handleStartClick}
+            aria-disabled={isBlocked}
+            title={!hasPersona ? 'Selecione um perfil de cliente antes de iniciar' : !isCreditsReady ? 'Carregando créditos...' : isCreditBlocked ? 'Limite atingido' : undefined}
             className={`flex items-center gap-3 bg-primary text-white px-10 py-4 rounded-full font-bold text-lg transition-transform shadow-[0_0_30px_rgba(219,39,119,0.25)] tracking-wide ${
-              disabled 
+              isBlocked 
                 ? 'opacity-40 cursor-not-allowed' 
                 : 'hover:bg-primary-hover hover:scale-105 active:scale-95 cursor-pointer'
             }`}
@@ -41,9 +64,21 @@ export function CallPanelIdle({ onStart, disabled }: Props) {
             <span>Iniciar Chamada</span>
           </button>
 
-          {disabled && (
+          {!hasPersona && (
             <p className="text-amber-400/90 text-sm mt-4 animate-pulse font-medium text-center">
               ⚠ Selecione uma persona antes de iniciar
+            </p>
+          )}
+
+          {!isCreditsReady && (
+            <p className="text-amber-400/90 text-sm mt-4 animate-pulse font-medium text-center">
+              ⚠ Carregando créditos...
+            </p>
+          )}
+
+          {isCreditBlocked && (
+            <p className="text-amber-400/90 text-sm mt-4 animate-pulse font-medium text-center">
+              ⚠ Limite atingido. Adquira mais créditos para continuar.
             </p>
           )}
         </div>

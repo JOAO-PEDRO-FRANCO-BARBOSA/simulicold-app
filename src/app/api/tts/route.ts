@@ -35,7 +35,7 @@ async function readUserBalanceSafely(
       .from('user_credits')
       .select('balance')
       .eq('user_id', userId)
-      .maybeSingle()) as { data: { balance: number } | null, error: any };
+      .single()) as { data: { balance: number } | null; error: any };
 
     if (error) {
       console.error('[TTS] Falha na leitura de creditos:', error);

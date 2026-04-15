@@ -4,11 +4,12 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { History, User, LogOut } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
+import { useUserCredits } from '@/hooks/useUserCredits';
 
 export function Header() {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
-  const [credits, setCredits] = useState<number | null>(null);
+  const { credits } = useUserCredits();
 
   useEffect(() => {
     async function loadData() {
@@ -22,14 +23,6 @@ export function Header() {
         if (profileRow?.avatar_url) {
           setAvatarUrl(profileRow.avatar_url);
         }
-
-        const { data: creditRow } = (await supabase
-          .from('user_credits')
-          .select('balance')
-          .eq('user_id', authData.user.id)
-          .maybeSingle()) as { data: { balance: number } | null, error: any };
-
-        setCredits(creditRow?.balance ?? 0);
       }
     }
     loadData();

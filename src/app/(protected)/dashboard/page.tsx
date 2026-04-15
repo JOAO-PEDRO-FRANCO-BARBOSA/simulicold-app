@@ -10,6 +10,7 @@ import { SupportPopup } from '@/components/SupportPopup';
 import { EndCallModal } from '@/components/EndCallModal';
 import { CreditsUpsellModal } from '@/components/CreditsUpsellModal';
 import { supabase } from '@/lib/supabase';
+import { useUserCredits } from '@/hooks/useUserCredits';
 
 export default function Dashboard() {
   const [callState, setCallState] = useState<'idle' | 'active' | 'ended'>('idle');
@@ -19,6 +20,7 @@ export default function Dashboard() {
   
   // Guardamos a sessão do Usuário logado
   const [userId, setUserId] = useState('');
+  const { credits } = useUserCredits();
 
   // Mensagens da Conversa (STT / Gemini)
   const [messages, setMessages] = useState<{ role: string, content: string }[]>([]);
@@ -68,7 +70,9 @@ export default function Dashboard() {
           <section className="h-full flex flex-col min-h-[600px]">
             {callState === 'idle' ? (
               <CallPanelIdle 
-                disabled={!selectedPersonaId}
+                credits={credits}
+                hasPersona={Boolean(selectedPersonaId)}
+                onUpsellRequired={handleUpsellRequired}
                 onStart={() => {
                   setMessages([]); // Reset messages on new call
                   setCallState('active');

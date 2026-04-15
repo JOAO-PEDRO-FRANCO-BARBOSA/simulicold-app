@@ -41,6 +41,46 @@ export function ActiveVoicePanel({ onEnd, onUpsellRequired, userId, personaId, d
   // Stream do microfone (para cleanup)
   const micStreamRef = useRef<MediaStream | null>(null);
 
+  const stopRecognition = () => {
+    if (recognitionRef.current) {
+      try {
+        recognitionRef.current.abort();
+      } catch (e) {
+        // ignore cleanup errors
+      }
+    }
+  };
+
+  const stopCurrentAudioAndRecording = () => {
+    if (currentTtsSourceRef.current) {
+      try {
+        currentTtsSourceRef.current.stop();
+        currentTtsSourceRef.current.disconnect();
+      } catch (e) {
+        // ignore cleanup errors
+      }
+      currentTtsSourceRef.current = null;
+    }
+
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+      try {
+        mediaRecorderRef.current.stop();
+      } catch (e) {
+        // ignore cleanup errors
+      }
+    }
+  };
+
+  const handleCreditExhausted = (message: string) => {
+    isActiveRef.current = false;
+    isSpeakingRef.current = false;
+    isFetchingRef.current = false;
+    setIsProcessing(false);
+    stopRecognition();
+    stopCurrentAudioAndRecording();
+    onUpsellRequired(message);
+  };
+
   // Sync messages state → ref (para uso seguro dentro de callbacks)
   useEffect(() => {
     messagesRef.current = messages;
@@ -107,10 +147,7 @@ export function ActiveVoicePanel({ onEnd, onUpsellRequired, userId, personaId, d
 
       if (ttsResponse.status === 402) {
         const payload = await ttsResponse.json().catch(() => ({ error: 'Créditos esgotados' }));
-        onUpsellRequired(payload.error || 'Créditos esgotados');
-        isSpeakingRef.current = false;
-        isFetchingRef.current = false;
-        setIsProcessing(false);
+        handleCreditExhausted(payload.error || 'Créditos esgotados');
         return;
       }
 
@@ -221,10 +258,7 @@ export function ActiveVoicePanel({ onEnd, onUpsellRequired, userId, personaId, d
 
       if (response.status === 402) {
         const payload = await response.json().catch(() => ({ error: 'Créditos esgotados' }));
-        onUpsellRequired(payload.error || 'Créditos esgotados');
-        isFetchingRef.current = false;
-        setIsProcessing(false);
-        startRecognition();
+        handleCreditExhausted(payload.error || 'Créditos esgotados');
         return;
       }
 
@@ -248,7 +282,9 @@ export function ActiveVoicePanel({ onEnd, onUpsellRequired, userId, personaId, d
 
     } catch (err: any) {
       console.error(err);
-      alert('Falha ao processar IA: ' + err.message);
+      if (err instanceof Error) {
+        alert('Falha ao processar IA: ' + err.message);
+      }
       isFetchingRef.current = false;
       setIsProcessing(false);
       startRecognition();
