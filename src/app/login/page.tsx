@@ -200,7 +200,7 @@ function AuthContent() {
       });
 
       if (!checkEmailResponse.ok) {
-        setErrorMsg('Não foi possível validar o e-mail agora. Tente novamente em instantes.');
+        setErrorMsg('Nao foi possivel validar seu e-mail agora. Tente novamente.');
         return;
       }
 
@@ -208,7 +208,6 @@ function AuthContent() {
 
       if (checkEmailData.exists) {
         setRegisterEmailError('Este e-mail já está registrado. Por favor, faça o login.');
-        setIsLogin(true);
         return;
       }
 
