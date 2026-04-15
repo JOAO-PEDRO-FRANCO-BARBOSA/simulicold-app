@@ -17,7 +17,7 @@ function getAuthorizationToken(request: Request): string | null {
 }
 
 async function readUserBalanceSafely(
-  supabase: ReturnType<typeof createClient>,
+  supabase: any,
   userId: string
 ): Promise<number | null> {
   try {
@@ -72,7 +72,7 @@ export async function POST(req: Request) {
       });
     }
 
-    const balance = await readUserBalanceSafely(supabase, user.id);
+    const balance = await readUserBalanceSafely(supabase as any, user.id);
     if (balance === null || balance <= 0) {
       return new Response(JSON.stringify({ error: 'Créditos esgotados' }), {
         status: 402,
