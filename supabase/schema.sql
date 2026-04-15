@@ -7,6 +7,7 @@
 CREATE TABLE public.profiles (
   id UUID REFERENCES auth.users(id) ON DELETE CASCADE NOT NULL PRIMARY KEY,
   full_name TEXT,
+  product_context TEXT,
   avatar_url TEXT,
   -- DEPRECATED: usar a tabela `subscriptions` (ver supabase/subscriptions_table.sql).
   -- Mantida apenas por retrocompatibilidade. Pode ser removida com:
