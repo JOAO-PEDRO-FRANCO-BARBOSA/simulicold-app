@@ -5,6 +5,7 @@
 import { generateObject } from 'ai';
 import { google } from '@ai-sdk/google';
 import { z } from 'zod';
+import { createSupabaseServerClient } from '@/lib/supabase-server';
 
 export const runtime = 'edge';
 
@@ -24,7 +25,7 @@ const analysisSchema = z.object({
   }))
 });
 
-const SYSTEM_PROMPT = `Você é um Treinador Sênior "Black Belt" de vendas B2B com 20 anos de experiência em cold calls corporativas.
+const SYSTEM_PROMPT_BASE = `Você é um Treinador Sênior "Black Belt" de vendas B2B com 20 anos de experiência em cold calls corporativas.
 Sua especialidade é dissecar cada fala de um vendedor usando frameworks rigorosos de persuasão.
 
 Seus PILARES de avaliação (use TODOS):
@@ -45,6 +46,20 @@ Seus PILARES de avaliação (use TODOS):
 - Não seja genérico. Se a fala foi ruim, diga EXATAMENTE o que deveria ter sido dito.
 - Escreva TUDO em português brasileiro.`;
 
+function buildSystemPrompt(productContext?: string | null) {
+  const normalizedContext = productContext?.trim();
+
+  if (!normalizedContext) {
+    return SYSTEM_PROMPT_BASE;
+  }
+
+  return `${SYSTEM_PROMPT_BASE}
+
+CONTEXTO DO PRODUTO/SERVIÇO DO USUÁRIO:
+O usuário está tentando vender o seguinte produto/serviço: ${normalizedContext}.
+Ao avaliar a performance do usuário, leve em consideração se ele conseguiu comunicar os valores desse produto, conectar benefícios com a dor do cliente e lidar com objeções coerentes com este mercado.`;
+}
+
 export async function POST(req: Request) {
   try {
     const body = await req.json();
@@ -52,6 +67,29 @@ export async function POST(req: Request) {
 
     if (!messages || !Array.isArray(messages) || messages.length === 0) {
       return new Response('Array de messages é obrigatório', { status: 400 });
+    }
+
+    const supabase = await createSupabaseServerClient();
+    const { data: authData, error: authError } = await supabase.auth.getUser();
+
+    if (authError) {
+      console.error('Erro ao resolver usuário autenticado em /api/analyze:', authError);
+    }
+
+    let productContext: string | null = null;
+
+    if (authData?.user) {
+      const { data: preferences, error: preferencesError } = await supabase
+        .from('user_preferences')
+        .select('product_context')
+        .eq('user_id', authData.user.id)
+        .maybeSingle();
+
+      if (preferencesError) {
+        console.error('Erro ao buscar user_preferences em /api/analyze:', preferencesError);
+      } else {
+        productContext = preferences?.product_context || null;
+      }
     }
 
     // Formatar a transcrição para o prompt
@@ -65,7 +103,7 @@ export async function POST(req: Request) {
       schema: analysisSchema,
       schemaName: 'SalesAnalysis',
       schemaDescription: 'Análise estruturada de uma simulação de cold call B2B',
-      system: SYSTEM_PROMPT,
+      system: buildSystemPrompt(productContext),
       prompt: `Analise a seguinte transcrição de cold call B2B e forneça sua avaliação detalhada:\n\n${transcriptText}`,
       temperature: 0.2, // Temperatura baixa: respostas determinísticas e rápidas
     });
