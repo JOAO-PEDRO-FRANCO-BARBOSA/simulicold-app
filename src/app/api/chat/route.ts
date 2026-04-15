@@ -21,11 +21,11 @@ async function readUserBalanceSafely(
   userId: string
 ): Promise<number | null> {
   try {
-    const { data, error } = await supabase
+    const { data, error } = (await supabase
       .from('user_credits')
       .select('balance')
       .eq('user_id', userId)
-      .maybeSingle();
+      .maybeSingle()) as { data: { balance: number } | null, error: any };
 
     if (error) {
       console.error('[CHAT] Falha na leitura de creditos:', error);

@@ -23,11 +23,11 @@ export function Header() {
           setAvatarUrl(profileRow.avatar_url);
         }
 
-        const { data: creditRow } = await supabase
+        const { data: creditRow } = (await supabase
           .from('user_credits')
           .select('balance')
           .eq('user_id', authData.user.id)
-          .maybeSingle();
+          .maybeSingle()) as { data: { balance: number } | null, error: any };
 
         setCredits(creditRow?.balance ?? 0);
       }
