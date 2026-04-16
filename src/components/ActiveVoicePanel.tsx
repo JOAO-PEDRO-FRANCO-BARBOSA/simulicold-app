@@ -14,6 +14,12 @@ interface Props {
   setMessages: React.Dispatch<React.SetStateAction<{ role: string, content: string }[]>>;
 }
 
+const DIFFICULTY_PROSODY_MAP: Record<string, { speakingRate: number; pitch: number }> = {
+  facil: { speakingRate: 0.95, pitch: -1.0 },
+  medio: { speakingRate: 1.0, pitch: 0.0 },
+  dificil: { speakingRate: 1.15, pitch: 1.0 },
+};
+
 export function ActiveVoicePanel({ onEnd, onUpsellRequired, userId, personaId, difficulty, messages, setMessages }: Props) {
   const [timeLeft, setTimeLeft] = useState(300);
   const [waveHeights, setWaveHeights] = useState([6, 6, 6, 6, 6]);
@@ -169,11 +175,18 @@ export function ActiveVoicePanel({ onEnd, onUpsellRequired, userId, personaId, d
     setIsProcessing(false);
 
     try {
+      const prosody = DIFFICULTY_PROSODY_MAP[difficulty] || DIFFICULTY_PROSODY_MAP.medio;
+
       // 1. Buscar áudio da ElevenLabs via nossa rota /api/tts
       const ttsResponse = await fetch('/api/tts', {
         method: 'POST',
         headers: await getAuthHeaders(),
-        body: JSON.stringify({ text, personaId }),
+        body: JSON.stringify({
+          text,
+          personaId,
+          speakingRate: prosody.speakingRate,
+          pitch: prosody.pitch,
+        }),
       });
 
       if (ttsResponse.status === 402) {

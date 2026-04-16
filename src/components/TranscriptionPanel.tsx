@@ -7,6 +7,8 @@ interface Props {
 }
 
 export function TranscriptionPanel({ messages = [] }: Props) {
+  const stripMarkup = (text: string) => text.replace(/<[^>]*>?/gm, '').trim();
+
   return (
     <div className="flex flex-col h-full gap-4 animate-in fade-in zoom-in-95 duration-500">
       {/* Área da Transcrição */}
@@ -45,7 +47,7 @@ export function TranscriptionPanel({ messages = [] }: Props) {
                   <p className="text-sm font-semibold mb-1 opacity-50 uppercase tracking-widest text-[10px]">
                     {msg.role === 'user' ? 'Você' : 'Cliente'}
                   </p>
-                  <p className="text-[15px] leading-relaxed">{msg.content}</p>
+                  <p className="text-[15px] leading-relaxed">{stripMarkup(msg.content)}</p>
                 </div>
               </div>
             ))

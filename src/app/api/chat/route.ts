@@ -91,7 +91,9 @@ export async function POST(req: Request) {
     // REGRA ABSOLUTA de realismo de cold call — prepended antes de qualquer persona
     const coldCallRule = `REGRA ABSOLUTA E INQUEBRÁVEL: Você está em uma cold call telefônica real. Responda em no máximo 1 ou 2 frases curtas. Seja direto, reativo e não faça discursos. Imite a pressa de um executivo ocupado que foi interrompido. NUNCA escreva parágrafos longos.\n\n`;
 
-    let basePrompt = coldCallRule + persona.prompt_system;
+    const ssmlRule = `IMPORTANTE: Você deve responder utilizando a formatação SSML para parecer humano. Use a tag <break time='Xms'/> para simular pausas de respiração, hesitação ou pensamento. Exemplo de resposta: 'Olha... <break time='600ms'/> eu não sei se isso faz sentido para nós agora. <break time='400ms'/> Quanto custaria?'. Não inclua a tag <speak>; retorne apenas texto com tags SSML internas como <break/>.\n\n`;
+
+    let basePrompt = ssmlRule + coldCallRule + persona.prompt_system;
 
     // Injeção de dificuldade baseada no seu schema
     const difficultyRules = {

@@ -43,8 +43,7 @@ async function readUserBalanceSafely(supabase: any, userId: string): Promise<{
 
 export async function POST(req: Request) {
   try {
-    const body = await req.json();
-    const { text, personaId } = body;
+    const { text, voiceType, personaId, speakingRate = 1.0, pitch = 0.0 } = await req.json();
 
     const supabase = await createSupabaseServerClient();
 
@@ -87,6 +86,14 @@ export async function POST(req: Request) {
       return new Response('O campo "text" é obrigatório.', { status: 400 });
     }
 
+    if (typeof speakingRate !== 'number' || Number.isNaN(speakingRate)) {
+      return new Response('O campo "speakingRate" deve ser numérico.', { status: 400 });
+    }
+
+    if (typeof pitch !== 'number' || Number.isNaN(pitch)) {
+      return new Response('O campo "pitch" deve ser numérico.', { status: 400 });
+    }
+
     const apiKey = process.env.GOOGLE_CLOUD_TTS_API_KEY;
     if (!apiKey) {
       return new Response('GOOGLE_CLOUD_TTS_API_KEY não configurada no .env.local', {
@@ -94,7 +101,7 @@ export async function POST(req: Request) {
       });
     }
 
-    const voiceName = VOICE_MAP[personaId] || VOICE_MAP.default;
+    const voiceName = VOICE_MAP[voiceType] || VOICE_MAP[personaId] || VOICE_MAP.default;
 
     const googleResponse = await fetch(
       `https://texttospeech.googleapis.com/v1/text:synthesize?key=${apiKey}`,
@@ -104,13 +111,15 @@ export async function POST(req: Request) {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          input: { text },
+          input: { ssml: `<speak>${text}</speak>` },
           voice: {
             languageCode: 'pt-BR',
             name: voiceName,
           },
           audioConfig: {
             audioEncoding: 'MP3',
+            speakingRate,
+            pitch,
           },
         }),
       }
