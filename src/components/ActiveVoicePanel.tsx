@@ -81,6 +81,37 @@ export function ActiveVoicePanel({ onEnd, onUpsellRequired, userId, personaId, d
     onUpsellRequired(message);
   };
 
+  const isCreditErrorStatus = (status?: number, message?: string): boolean => {
+    return status === 402 || Boolean(message && message.includes('402'));
+  };
+
+  const recoverVoiceLoopAfterError = () => {
+    if (currentTtsSourceRef.current) {
+      try {
+        currentTtsSourceRef.current.stop();
+      } catch (e) {
+        // ignore cleanup errors
+      }
+      try {
+        currentTtsSourceRef.current.disconnect();
+      } catch (e) {
+        // ignore cleanup errors
+      }
+      currentTtsSourceRef.current = null;
+    }
+
+    isSpeakingRef.current = false;
+    isFetchingRef.current = false;
+    setIsProcessing(false);
+    stopRecognition();
+
+    setTimeout(() => {
+      if (isActiveRef.current && !isSpeakingRef.current && !isFetchingRef.current) {
+        startRecognition();
+      }
+    }, 400);
+  };
+
   // Sync messages state → ref (para uso seguro dentro de callbacks)
   useEffect(() => {
     messagesRef.current = messages;
@@ -153,7 +184,9 @@ export function ActiveVoicePanel({ onEnd, onUpsellRequired, userId, personaId, d
 
       if (!ttsResponse.ok) {
         const errMsg = await ttsResponse.text();
-        throw new Error(`TTS falhou (${ttsResponse.status}): ${errMsg}`);
+        throw Object.assign(new Error(`TTS falhou (${ttsResponse.status}): ${errMsg}`), {
+          status: ttsResponse.status,
+        });
       }
 
       // Obter o áudio como ArrayBuffer
@@ -209,12 +242,13 @@ export function ActiveVoicePanel({ onEnd, onUpsellRequired, userId, personaId, d
       sourceNode.start(0);
 
     } catch (err: any) {
-      console.error('Erro no TTS ElevenLabs:', err);
-      // Mesmo com erro, garantir que o fluxo continua
-      currentTtsSourceRef.current = null;
-      isSpeakingRef.current = false;
-      isFetchingRef.current = false;
-      startRecognition();
+      if (isCreditErrorStatus(err?.status, err?.message)) {
+        handleCreditExhausted('Créditos esgotados');
+        return;
+      }
+
+      console.error('Erro no TTS:', err);
+      recoverVoiceLoopAfterError();
     }
   };
 
@@ -265,7 +299,9 @@ export function ActiveVoicePanel({ onEnd, onUpsellRequired, userId, personaId, d
       if (!response.ok) {
         const payload = await response.json().catch(() => null);
         const errorText = payload?.error || `Erro na API (status ${response.status})`;
-        throw new Error(errorText);
+        throw Object.assign(new Error(errorText), {
+          status: response.status,
+        });
       }
 
       const data = await response.json();
@@ -281,13 +317,14 @@ export function ActiveVoicePanel({ onEnd, onUpsellRequired, userId, personaId, d
       speak(botReply);
 
     } catch (err: any) {
-      console.error(err);
-      if (err instanceof Error) {
-        alert('Falha ao processar IA: ' + err.message);
+      if (isCreditErrorStatus(err?.status, err?.message)) {
+        handleCreditExhausted('Créditos esgotados');
+        return;
       }
-      isFetchingRef.current = false;
-      setIsProcessing(false);
-      startRecognition();
+
+      console.error('Erro no chat:', err);
+      console.warn('Tivemos um problema de conexão. Tente falar novamente.');
+      recoverVoiceLoopAfterError();
     }
   };
 
@@ -466,6 +503,7 @@ export function ActiveVoicePanel({ onEnd, onUpsellRequired, userId, personaId, d
               }, 500);
             } else if (event.error !== 'aborted') {
               console.error('STT Error:', event.error);
+              recoverVoiceLoopAfterError();
             }
           };
 

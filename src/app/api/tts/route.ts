@@ -1,35 +1,23 @@
 // src/app/api/tts/route.ts
-// Rota de Text-to-Speech usando ElevenLabs API — STREAMING
-// Recebe texto + personaId, retorna stream de áudio MP3 para playback imediato
-import { createClient } from '@supabase/supabase-js';
+// Rota de Text-to-Speech usando Google Cloud TTS REST
+// Recebe texto + personaId e retorna áudio MP3 para playback
+import { NextResponse } from 'next/server';
+import { createSupabaseServerClient, getAuthorizationToken } from '@/lib/supabase-server';
 
 export const runtime = 'nodejs';
 
-// Mapeamento de vozes ElevenLabs por tipo de persona
-// Vozes padrão disponíveis em todas as contas ElevenLabs
 const VOICE_MAP: Record<string, string> = {
-  default: 'pNInz6obpgDQGcFmaJgB',        // Adam — voz masculina padrão
-  masculino: 'pNInz6obpgDQGcFmaJgB',       // Adam
-  feminino: 'EXAVITQu4vr4xnSDxMaL',        // Bella — voz feminina
-  assertivo: 'VR6AewLTigWG4xSOukaG',       // Arnold — voz firme/grave
-  jovem: 'ErXwobaYiN019PkySvjV',           // Antoni — voz jovem masculina
+  default: 'pt-BR-Neural2-B',
+  masculino: 'pt-BR-Neural2-B',
+  feminino: 'pt-BR-Neural2-C',
+  assertivo: 'pt-BR-Neural2-B',
+  jovem: 'pt-BR-Neural2-B',
 };
 
-function getAuthorizationToken(request: Request): string | null {
-  const authHeader = request.headers.get('authorization');
-  if (!authHeader) return null;
-
-  const [scheme, token] = authHeader.split(' ');
-  if (!scheme || !token) return null;
-  if (scheme.toLowerCase() !== 'bearer') return null;
-
-  return token;
-}
-
-async function readUserBalanceSafely(
-  supabase: any,
-  userId: string
-): Promise<number | null> {
+async function readUserBalanceSafely(supabase: any, userId: string): Promise<{
+  balance: number | null;
+  dbError: boolean;
+}> {
   try {
     const { data, error } = (await supabase
       .from('user_credits')
@@ -39,17 +27,17 @@ async function readUserBalanceSafely(
 
     if (error) {
       console.error('[TTS] Falha na leitura de creditos:', error);
-      return null;
+      return { balance: null, dbError: true };
     }
 
     if (!data || typeof data.balance !== 'number') {
-      return 0;
+      return { balance: 0, dbError: false };
     }
 
-    return data.balance;
+    return { balance: data.balance, dbError: false };
   } catch (error) {
     console.error('[TTS] Excecao ao ler creditos:', error);
-    return null;
+    return { balance: null, dbError: true };
   }
 }
 
@@ -58,22 +46,17 @@ export async function POST(req: Request) {
     const body = await req.json();
     const { text, personaId } = body;
 
-    const token = getAuthorizationToken(req);
-    if (!token) {
-      return new Response(JSON.stringify({ error: 'Não autenticado.' }), {
-        status: 401,
-        headers: { 'Content-Type': 'application/json' },
-      });
-    }
+    const supabase = await createSupabaseServerClient();
 
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
-    const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
-    const supabase = createClient(supabaseUrl, supabaseKey);
+    const token = getAuthorizationToken(req);
+    const userResponse = token
+      ? await supabase.auth.getUser(token)
+      : await supabase.auth.getUser();
 
     const {
       data: { user },
       error: userError,
-    } = await supabase.auth.getUser(token);
+    } = userResponse;
 
     if (userError || !user) {
       return new Response(JSON.stringify({ error: 'Não autenticado.' }), {
@@ -82,8 +65,18 @@ export async function POST(req: Request) {
       });
     }
 
-    const balance = await readUserBalanceSafely(supabase as any, user.id);
-    if (balance === null || balance <= 0) {
+    const { balance, dbError } = await readUserBalanceSafely(supabase as any, user.id);
+    if (dbError) {
+      return new Response(
+        JSON.stringify({ error: 'Falha de comunicação com o banco de dados.' }),
+        {
+          status: 500,
+          headers: { 'Content-Type': 'application/json' },
+        }
+      );
+    }
+
+    if (!balance || balance <= 0) {
       return new Response(JSON.stringify({ error: 'Créditos esgotados' }), {
         status: 402,
         headers: { 'Content-Type': 'application/json' },
@@ -94,56 +87,51 @@ export async function POST(req: Request) {
       return new Response('O campo "text" é obrigatório.', { status: 400 });
     }
 
-    const apiKey = process.env.ELEVENLABS_API_KEY;
+    const apiKey = process.env.GOOGLE_CLOUD_TTS_API_KEY;
     if (!apiKey) {
-      return new Response(
-        'ELEVENLABS_API_KEY não configurada no .env.local',
-        { status: 500 }
-      );
+      return new Response('GOOGLE_CLOUD_TTS_API_KEY não configurada no .env.local', {
+        status: 500,
+      });
     }
 
-    // Selecionar voz: usa mapeamento ou default (Adam)
-    const voiceId = VOICE_MAP[personaId] || VOICE_MAP.default;
+    const voiceName = VOICE_MAP[personaId] || VOICE_MAP.default;
 
-    // Usar endpoint de STREAMING da ElevenLabs para menor latência
-    const elevenLabsResponse = await fetch(
-      `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}/stream`,
+    const googleResponse = await fetch(
+      `https://texttospeech.googleapis.com/v1/text:synthesize?key=${apiKey}`,
       {
         method: 'POST',
         headers: {
-          'xi-api-key': apiKey,
           'Content-Type': 'application/json',
-          'Accept': 'audio/mpeg',
         },
         body: JSON.stringify({
-          text,
-          model_id: 'eleven_turbo_v2_5', // Menor latência + cadência mais rápida para conversação
-          voice_settings: {
-            stability: 0.4,          // Menos estabilidade = mais expressividade
-            similarity_boost: 0.8,   // Alta fidelidade à voz original
-            style: 0.15,             // Leve estilo emocional
-            use_speaker_boost: true,
+          input: { text },
+          voice: {
+            languageCode: 'pt-BR',
+            name: voiceName,
           },
-          // optimize_streaming_latency: 3 = máxima otimização de latência
-          optimize_streaming_latency: 3,
+          audioConfig: {
+            audioEncoding: 'MP3',
+          },
         }),
       }
     );
 
-    if (!elevenLabsResponse.ok) {
-      const errorBody = await elevenLabsResponse.text();
-      console.error('ElevenLabs API error:', elevenLabsResponse.status, errorBody);
-      return new Response(
-        `Erro na API ElevenLabs: ${elevenLabsResponse.status}`,
-        { status: 502 }
-      );
+    if (!googleResponse.ok) {
+      const errorBody = await googleResponse.text();
+      console.error('Google TTS API error:', googleResponse.status, errorBody);
+      return new Response(`Erro na API Google TTS: ${googleResponse.status}`, {
+        status: 502,
+      });
     }
 
-    // STREAMING: Pipe o ReadableStream do ElevenLabs direto para o cliente
-    // O frontend pode começar a decodificar e tocar enquanto ainda chega mais dados
-    if (!elevenLabsResponse.body) {
-      return new Response('ElevenLabs retornou corpo vazio', { status: 502 });
+    const data = (await googleResponse.json()) as { audioContent?: string };
+    if (!data.audioContent || typeof data.audioContent !== 'string') {
+      return new Response('Google TTS retornou audioContent inválido', {
+        status: 502,
+      });
     }
+
+    const audioBuffer = Buffer.from(data.audioContent, 'base64');
 
     const { error: decrementError } = await supabase.rpc('decrement_credit', {
       user_uid: user.id,
@@ -157,12 +145,11 @@ export async function POST(req: Request) {
       });
     }
 
-    return new Response(elevenLabsResponse.body, {
+    return new NextResponse(audioBuffer, {
       status: 200,
       headers: {
         'Content-Type': 'audio/mpeg',
-        'Transfer-Encoding': 'chunked',
-        'Cache-Control': 'no-store', // Cada fala é única, não cachear
+        'Cache-Control': 'no-store',
       },
     });
   } catch (error: unknown) {

@@ -1,25 +1,14 @@
 // src/app/api/chat/route.ts
-import { createClient } from '@supabase/supabase-js';
 import { generateText } from 'ai';
 import { google } from '@ai-sdk/google'; // Alterado de openai para google
+import { createSupabaseServerClient, getAuthorizationToken } from '@/lib/supabase-server';
 
 export const runtime = 'edge';
 
-function getAuthorizationToken(request: Request): string | null {
-  const authHeader = request.headers.get('authorization');
-  if (!authHeader) return null;
-
-  const [scheme, token] = authHeader.split(' ');
-  if (!scheme || !token) return null;
-  if (scheme.toLowerCase() !== 'bearer') return null;
-
-  return token;
-}
-
-async function readUserBalanceSafely(
-  supabase: any,
-  userId: string
-): Promise<number | null> {
+async function readUserBalanceSafely(supabase: any, userId: string): Promise<{
+  balance: number | null;
+  dbError: boolean;
+}> {
   try {
     const { data, error } = (await supabase
       .from('user_credits')
@@ -29,17 +18,17 @@ async function readUserBalanceSafely(
 
     if (error) {
       console.error('[CHAT] Falha na leitura de creditos:', error);
-      return null;
+      return { balance: null, dbError: true };
     }
 
     if (!data || typeof data.balance !== 'number') {
-      return 0;
+      return { balance: 0, dbError: false };
     }
 
-    return data.balance;
+    return { balance: data.balance, dbError: false };
   } catch (error) {
     console.error('[CHAT] Excecao ao ler creditos:', error);
-    return null;
+    return { balance: null, dbError: true };
   }
 }
 
@@ -48,22 +37,17 @@ export async function POST(req: Request) {
     const body = await req.json();
     const { messages, persona_id, difficulty_level } = body;
 
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
-    const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
-    const supabase = createClient(supabaseUrl, supabaseKey);
+    const supabase = await createSupabaseServerClient();
 
     const token = getAuthorizationToken(req);
-    if (!token) {
-      return new Response(JSON.stringify({ error: 'Não autenticado.' }), {
-        status: 401,
-        headers: { 'Content-Type': 'application/json' },
-      });
-    }
+    const userResponse = token
+      ? await supabase.auth.getUser(token)
+      : await supabase.auth.getUser();
 
     const {
       data: { user },
       error: userError,
-    } = await supabase.auth.getUser(token);
+    } = userResponse;
 
     if (userError || !user) {
       return new Response(JSON.stringify({ error: 'Não autenticado.' }), {
@@ -72,8 +56,18 @@ export async function POST(req: Request) {
       });
     }
 
-    const balance = await readUserBalanceSafely(supabase as any, user.id);
-    if (balance === null || balance <= 0) {
+    const { balance, dbError } = await readUserBalanceSafely(supabase as any, user.id);
+    if (dbError) {
+      return new Response(
+        JSON.stringify({ error: 'Falha de comunicação com o banco de dados.' }),
+        {
+          status: 500,
+          headers: { 'Content-Type': 'application/json' },
+        }
+      );
+    }
+
+    if (!balance || balance <= 0) {
       return new Response(JSON.stringify({ error: 'Créditos esgotados' }), {
         status: 402,
         headers: { 'Content-Type': 'application/json' },
