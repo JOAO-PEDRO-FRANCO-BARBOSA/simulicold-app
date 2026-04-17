@@ -3,10 +3,12 @@
 import { useState } from 'react';
 import { ArrowRight, Coins, Loader2 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
+import { ADDON_PRICING, formatCurrencyBRL } from '@/lib/pricing';
 
 export default function CheckoutAddonPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const addonPriceLabel = formatCurrencyBRL(ADDON_PRICING['simulacoes-20'].price);
 
   async function handleBuyAddon() {
     try {
@@ -59,7 +61,7 @@ export default function CheckoutAddonPage() {
           </h1>
 
           <p className="text-slate-300 text-lg leading-relaxed mb-7">
-            Limite atingido! Adquira mais 20 simulações por R$ 97 para continuar treinando agora ou aguarde a renovação do plano.
+            {`Limite atingido! Adquira mais 20 simulações por ${addonPriceLabel} para continuar treinando agora ou aguarde a renovação do plano.`}
           </p>
 
           {errorMsg && (
@@ -89,7 +91,7 @@ export default function CheckoutAddonPage() {
                 </>
               ) : (
                 <>
-                  Comprar +20 simulações por R$ 97
+                  {`Comprar +20 simulações por ${addonPriceLabel}`}
                   <ArrowRight className="w-4 h-4" />
                 </>
               )}

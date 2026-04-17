@@ -126,12 +126,28 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'external_reference ausente.' }, { status: 422 });
     }
 
-    // 4. Determinar o plano pelo valor da transação
+    // 4. Determinar o plano pelo valor da transação sem fallback silencioso
     const transactionAmount = preApproval.auto_recurring?.transaction_amount;
-    let planType: PlanType = 'mensal';
-    if (transactionAmount === PLANS.semestral.price) planType = 'semestral';
-    else if (transactionAmount === PLANS.trimestral.price) planType = 'trimestral';
-    else planType = 'mensal';
+    const normalizedAmount =
+      typeof transactionAmount === 'number'
+        ? Number(transactionAmount.toFixed(2))
+        : null;
+
+    const matchedPlanEntry = (Object.entries(PLANS) as Array<[PlanType, (typeof PLANS)[PlanType]]>)
+      .find(([, config]) => Number(config.price.toFixed(2)) === normalizedAmount);
+
+    if (!matchedPlanEntry) {
+      console.error('[WEBHOOK MP] Valor de transação não mapeado para plano:', {
+        preapprovalId,
+        transactionAmount,
+      });
+      return NextResponse.json(
+        { error: 'Valor de assinatura nao reconhecido.' },
+        { status: 422 }
+      );
+    }
+
+    const [planType] = matchedPlanEntry;
 
     // 5. Calcular current_period_end
     const frequencyMonths = PLANS[planType].frequency;

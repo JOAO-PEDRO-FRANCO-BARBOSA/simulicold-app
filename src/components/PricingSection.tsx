@@ -3,13 +3,12 @@
 import { useState } from 'react';
 import { FileText, Loader2 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
-
-type PlanType = 'mensal' | 'trimestral' | 'semestral';
+import { formatCurrencyBRL, PLAN_PRICING, PlanType } from '@/lib/pricing';
 
 interface Plan {
   id: PlanType;
   label: string;
-  price: string;
+  price: number;
   description: string;
   highlight: boolean;
   buttonLabel: string;
@@ -19,7 +18,7 @@ const PLANS: Plan[] = [
   {
     id: 'semestral',
     label: 'Semestral',
-    price: 'R$ 997',
+    price: PLAN_PRICING.semestral.price,
     description:
       'Acesso completo por 6 meses. Ideal para equipes escalando suas operações com máxima eficiência no pagamento a termo.',
     highlight: false,
@@ -28,7 +27,7 @@ const PLANS: Plan[] = [
   {
     id: 'trimestral',
     label: 'Trimestral',
-    price: 'R$ 597',
+    price: PLAN_PRICING.trimestral.price,
     description:
       'Acesso total por 3 meses. Compromisso balanceado garantindo evolução contínua.',
     highlight: true,
@@ -37,7 +36,7 @@ const PLANS: Plan[] = [
   {
     id: 'mensal',
     label: 'Mensal',
-    price: 'R$ 247',
+    price: PLAN_PRICING.mensal.price,
     description:
       'Renovação mensal garantindo flexibilidade para quem quer testar e provar o valor.',
     highlight: false,
@@ -135,7 +134,7 @@ export default function PricingSection() {
               </div>
 
               <h3 className="text-xl font-bold text-white mb-2">{plan.label}</h3>
-              <div className="text-blue-400 font-semibold mb-6">({plan.price})</div>
+              <div className="text-blue-400 font-semibold mb-6">({formatCurrencyBRL(plan.price)})</div>
 
               <p className="text-slate-400 text-sm mb-8 flex-1">{plan.description}</p>
 

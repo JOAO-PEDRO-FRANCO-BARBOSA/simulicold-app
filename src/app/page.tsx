@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { Mic, FileText, Users, History } from 'lucide-react';
 import Image from 'next/image';
+import { formatCurrencyBRL, PLAN_PRICING } from '@/lib/pricing';
 
 export default function LandingPage() {
   return (
@@ -170,7 +171,7 @@ export default function LandingPage() {
                 <FileText className="w-5 h-5" />
               </div>
               <h3 className="text-xl font-bold text-white mb-2">Semestral</h3>
-              <div className="text-blue-400 font-semibold mb-6">(R$ 997)</div>
+              <div className="text-blue-400 font-semibold mb-6">({formatCurrencyBRL(PLAN_PRICING.semestral.price)})</div>
               <p className="text-slate-400 text-sm mb-8 flex-1">
                 Acesso completo por 6 meses. Ideal para equipes escalando suas operações com máxima eficiência no pagamento a termo.
               </p>
@@ -188,7 +189,7 @@ export default function LandingPage() {
                 <FileText className="w-5 h-5" />
               </div>
               <h3 className="text-xl font-bold text-white mb-2">Trimestral</h3>
-              <div className="text-blue-400 font-semibold mb-6">(R$ 597)</div>
+              <div className="text-blue-400 font-semibold mb-6">({formatCurrencyBRL(PLAN_PRICING.trimestral.price)})</div>
               <p className="text-slate-400 text-sm mb-8 flex-1">
                 Acesso total por 3 meses. Compromisso balanceado garantindo evolução contínua.
               </p>
@@ -206,7 +207,7 @@ export default function LandingPage() {
                 <FileText className="w-5 h-5" />
               </div>
               <h3 className="text-xl font-bold text-white mb-2">Mensal</h3>
-              <div className="text-blue-400 font-semibold mb-6">(R$ 247)</div>
+              <div className="text-blue-400 font-semibold mb-6">({formatCurrencyBRL(PLAN_PRICING.mensal.price)})</div>
               <p className="text-slate-400 text-sm mb-8 flex-1">
                 Renovação mensal garantindo flexibilidade para quem quer testar e provar o valor.
               </p>

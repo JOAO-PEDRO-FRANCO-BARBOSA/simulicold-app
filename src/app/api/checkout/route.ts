@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createSupabaseServerClient, getAuthorizationToken } from '@/lib/supabase-server';
 import { preApprovalClient, PLANS, PlanType } from '@/lib/mercadopago';
+import { PLAN_TYPES } from '@/lib/pricing';
 
 function normalizeSiteUrl(raw: string | undefined): string {
   const fallback = 'http://localhost:3000';
@@ -84,7 +85,7 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const planType = body.planType as PlanType;
 
-    if (!planType || !['mensal', 'trimestral', 'semestral'].includes(planType)) {
+    if (!planType || !PLAN_TYPES.includes(planType)) {
       return NextResponse.json(
         { error: 'Plano inválido. Use: mensal, trimestral ou semestral.' },
         { status: 400 }
