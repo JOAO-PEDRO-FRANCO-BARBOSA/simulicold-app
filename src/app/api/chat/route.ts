@@ -50,23 +50,23 @@ export async function POST(req: Request) {
       });
     }
 
-    const globalVoiceRule = `IMPORTANTE: Você é um humano em uma ligação. NUNCA utilize tags HTML, XML ou SSML (como <break>, <speak>). Use EXCLUSIVAMENTE a pontuação (vírgulas, pontos finais e reticências) para ditar as pausas e o ritmo da sua fala. Se o cliente encerrar a ligação, use a tag [FIM_DA_LIGACAO] no final.\n\n`;
+    const globalVoiceRule = `REGRA OBRIGATÓRIA: NUNCA use tags SSML como <break>. Use EXCLUSIVAMENTE pontuação natural para ritmo e emoção. Se o cliente encerrar a ligação, use a tag [FIM_DA_LIGACAO] no final.\n\n`;
 
     // REGRA ABSOLUTA de realismo de cold call — prepended antes de qualquer persona
     const coldCallRule = `REGRA ABSOLUTA E INQUEBRÁVEL: Você está em uma cold call telefônica real. Responda como uma pessoa real, de forma natural, direta e reativa ao contexto da ligação. Evite discursos longos e mantenha tom conversacional.\n\n`;
 
-    let difficultyInstructions = 'Comportamento: O cliente é ocupado e cético (padrão B2B). Estilo de fala: Use um tom normal, com algumas pausas pensativas utilizando reticências (...).';
+    let difficultyInstructions = 'Cliente padrão B2B. Use pausas com reticências (...).';
 
     switch (difficulty_level) {
       case 'facil':
-        difficultyInstructions = 'Comportamento: O cliente é receptivo, calmo e educado. Estilo de fala: Use frases mais longas, fluidas e pacientes.';
+        difficultyInstructions = 'Cliente receptivo e calmo. Fale com frases longas e pacientes.';
         break;
       case 'dificil':
-        difficultyInstructions = 'Comportamento: O cliente é osso duro, impaciente, arrogante e quer desligar. Estilo de fala: Use frases muito curtas, secas e cortes rápidos. Abuse de pontos finais e reticências (...) para criar impaciência e silêncios constrangedores.';
+        difficultyInstructions = 'Cliente impaciente e ríspido. Use frases curtas, secas e muitas reticências (...) para criar silêncios constrangedores.';
         break;
       case 'medio':
       default:
-        difficultyInstructions = 'Comportamento: O cliente é ocupado e cético (padrão B2B). Estilo de fala: Use um tom normal, com algumas pausas pensativas utilizando reticências (...).';
+        difficultyInstructions = 'Cliente padrão B2B. Use pausas com reticências (...).';
         break;
     }
 

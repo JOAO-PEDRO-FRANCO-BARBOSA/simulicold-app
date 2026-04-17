@@ -15,17 +15,10 @@ interface Props {
   setMessages: React.Dispatch<React.SetStateAction<{ role: string, content: string }[]>>;
 }
 
-const DIFFICULTY_PROSODY_MAP: Record<string, { speakingRate: number; pitch: number }> = {
-  facil: { speakingRate: 0.95, pitch: -1.0 },
-  medio: { speakingRate: 1.0, pitch: 0.0 },
-  dificil: { speakingRate: 1.15, pitch: 1.0 },
-};
-
 export function ActiveVoicePanel({ onEnd, onUpsellRequired, userId, sessionId, personaId, difficulty, messages, setMessages }: Props) {
   const [timeLeft, setTimeLeft] = useState(300);
   const [waveHeights, setWaveHeights] = useState([6, 6, 6, 6, 6]);
   const [isProcessing, setIsProcessing] = useState(false);
-  const [selectedPersona, setSelectedPersona] = useState<{ name?: string; gender?: string } | null>(null);
 
   // === Refs de controle de estado ===
   const recognitionRef = useRef<any>(null);
@@ -144,37 +137,6 @@ export function ActiveVoicePanel({ onEnd, onUpsellRequired, userId, sessionId, p
     messagesRef.current = messages;
   }, [messages]);
 
-  useEffect(() => {
-    let mounted = true;
-
-    const loadSelectedPersona = async () => {
-      if (!personaId) {
-        if (mounted) setSelectedPersona(null);
-        return;
-      }
-
-      const { data, error } = await supabase
-        .from('personas')
-        .select('name, gender')
-        .eq('id', personaId)
-        .maybeSingle();
-
-      if (error) {
-        console.error('[VOICE] Erro ao carregar persona para voz:', error);
-      }
-
-      if (mounted) {
-        setSelectedPersona(data ?? null);
-      }
-    };
-
-    loadSelectedPersona();
-
-    return () => {
-      mounted = false;
-    };
-  }, [personaId]);
-
   const formatTime = (seconds: number) => {
     const m = Math.floor(seconds / 60);
     const s = seconds % 60;
@@ -227,24 +189,13 @@ export function ActiveVoicePanel({ onEnd, onUpsellRequired, userId, sessionId, p
     setIsProcessing(false);
 
     try {
-      const prosody = DIFFICULTY_PROSODY_MAP[difficulty] || DIFFICULTY_PROSODY_MAP.medio;
-      const genderStr = selectedPersona?.gender?.toLowerCase() || '';
-      const isFemale =
-        genderStr.includes('f') ||
-        genderStr.includes('mulher') ||
-        Boolean(selectedPersona?.name?.includes('Fernanda'));
-      const currentVoiceType = isFemale ? 'F' : 'M';
-
-      // 1. Buscar áudio da ElevenLabs via nossa rota /api/tts
+      // 1. Buscar áudio via nossa rota /api/tts
       const ttsResponse = await fetch('/api/tts', {
         method: 'POST',
         headers: await getAuthHeaders(),
         body: JSON.stringify({
           text,
-          voiceType: currentVoiceType,
           personaId,
-          speakingRate: prosody.speakingRate,
-          pitch: prosody.pitch,
         }),
       });
 

@@ -8,7 +8,7 @@ export const runtime = 'nodejs';
 
 export async function POST(req: Request) {
   try {
-    const { text, voiceType = 'M', speakingRate = 1.0, pitch = 0.0 } = await req.json();
+    const { text, personaId, speakingRate = 1.0, pitch = 0.0 } = await req.json();
 
     const supabase = await createSupabaseServerClient();
 
@@ -33,6 +33,10 @@ export async function POST(req: Request) {
       return new Response('O campo "text" é obrigatório.', { status: 400 });
     }
 
+    if (!personaId || typeof personaId !== 'string') {
+      return new Response('O campo "personaId" é obrigatório.', { status: 400 });
+    }
+
     if (typeof speakingRate !== 'number' || Number.isNaN(speakingRate)) {
       return new Response('O campo "speakingRate" deve ser numérico.', { status: 400 });
     }
@@ -48,11 +52,39 @@ export async function POST(req: Request) {
       });
     }
 
-    let googleVoiceName = 'pt-BR-Neural2-B'; // Voz Masculina padrão
+    let resolvedVoiceName = 'pt-BR-Chirp3-HD-Achernar';
+    const { data: personaRow, error: personaError } = await supabase
+      .from('personas')
+      .select('voice_name')
+      .eq('id', personaId)
+      .maybeSingle();
 
-    if (voiceType === 'F') {
-      googleVoiceName = 'pt-BR-Neural2-C'; // Voz Feminina padrão
+    if (personaError) {
+      console.warn('[TTS] Falha ao buscar voice_name da persona, usando fallback:', personaError);
     }
+
+    if (personaRow && typeof (personaRow as { voice_name?: unknown }).voice_name === 'string') {
+      const dbVoiceName = (personaRow as { voice_name?: string }).voice_name?.trim();
+      if (dbVoiceName) {
+        resolvedVoiceName = dbVoiceName;
+      }
+    }
+
+    const isChirp = resolvedVoiceName.includes('Chirp3');
+    const sanitizedText = text.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+    const safeText = sanitizedText || text.replace(/<[^>]*>/g, '').trim() || text;
+
+    const inputPayload = isChirp
+      ? { text: safeText }
+      : { ssml: `<speak>${text}</speak>` };
+
+    const audioConfigPayload = isChirp
+      ? { audioEncoding: 'MP3' }
+      : {
+          audioEncoding: 'MP3',
+          speakingRate,
+          pitch,
+        };
 
     const googleResponse = await fetch(
       `https://texttospeech.googleapis.com/v1/text:synthesize?key=${apiKey}`,
@@ -62,16 +94,12 @@ export async function POST(req: Request) {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          input: { ssml: `<speak>${text}</speak>` },
+          input: inputPayload,
           voice: {
             languageCode: 'pt-BR',
-            name: googleVoiceName,
+            name: resolvedVoiceName,
           },
-          audioConfig: {
-            audioEncoding: 'MP3',
-            speakingRate,
-            pitch,
-          },
+          audioConfig: audioConfigPayload,
         }),
       }
     );
