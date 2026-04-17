@@ -4,12 +4,16 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { History, User, LogOut } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
-import { useUserCredits } from '@/hooks/useUserCredits';
+import { useUserSimulations } from '@/hooks/useUserSimulations';
 
-export function Header() {
+interface HeaderProps {
+  onExitSimulator?: () => void;
+}
+
+export function Header({ onExitSimulator }: HeaderProps) {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
-  const { credits } = useUserCredits();
+  const { simulations } = useUserSimulations();
 
   useEffect(() => {
     async function loadData() {
@@ -54,7 +58,7 @@ export function Header() {
       <div className="flex items-center gap-6 text-sm text-foreground/80">
         <div className="hidden sm:flex items-center gap-2 rounded-full border border-accent/30 bg-accent/10 px-3 py-1.5 text-accent font-semibold">
           <span>🪙</span>
-          <span>{credits ?? 0} créditos</span>
+          <span>{simulations ?? 0} simulações restantes</span>
         </div>
 
         <Link href="/history" className="flex items-center gap-2 hover:text-foreground transition-colors group cursor-pointer">
@@ -98,7 +102,10 @@ export function Header() {
 
                 <Link
                   href="/"
-                  onClick={() => setIsMenuOpen(false)}
+                  onClick={() => {
+                    onExitSimulator?.();
+                    setIsMenuOpen(false);
+                  }}
                   className="flex items-center gap-3 px-4 py-3 hover:bg-red-500/10 hover:text-red-500 transition-colors cursor-pointer text-foreground font-medium"
                 >
                   <LogOut className="w-4 h-4 text-red-500" />

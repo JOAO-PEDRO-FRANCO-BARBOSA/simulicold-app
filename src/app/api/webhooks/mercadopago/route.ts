@@ -8,12 +8,12 @@ type WebhookBody = {
   id?: string;
 };
 
-async function addCreditsToUser(
+async function addSimulationsToUser(
   userId: string,
   amount: number,
   supabaseAdmin = createSupabaseAdminClient()
 ) {
-  const { data: currentCredits, error: readError } = await supabaseAdmin
+  const { data: currentSimulations, error: readError } = await supabaseAdmin
     .from('user_credits')
     .select('balance')
     .eq('user_uid', userId)
@@ -23,7 +23,7 @@ async function addCreditsToUser(
     return { error: readError };
   }
 
-  const nextBalance = Math.max(0, (currentCredits?.balance ?? 0) + amount);
+  const nextBalance = Math.max(0, (currentSimulations?.balance ?? 0) + amount);
 
   return supabaseAdmin
     .from('user_credits')
@@ -72,15 +72,15 @@ export async function POST(request: NextRequest) {
       }
 
       const supabaseAdmin = createSupabaseAdminClient();
-      const addonCredits = ADDON_PACKAGES['creditos-20'].credits;
-      const { error: creditError } = await addCreditsToUser(userId, addonCredits, supabaseAdmin);
+      const addonSimulations = ADDON_PACKAGES['simulacoes-20'].simulations;
+      const { error: simulationsError } = await addSimulationsToUser(userId, addonSimulations, supabaseAdmin);
 
-      if (creditError) {
-        console.error('[WEBHOOK MP] Erro ao somar créditos avulsos:', creditError);
+      if (simulationsError) {
+        console.error('[WEBHOOK MP] Erro ao somar simulações avulsas:', simulationsError);
         return NextResponse.json({ error: 'Erro ao creditar pacote avulso.' }, { status: 500 });
       }
 
-      console.log(`[WEBHOOK MP] +${addonCredits} créditos aplicados para user ${userId} (payment ${paymentId})`);
+      console.log(`[WEBHOOK MP] +${addonSimulations} simulações aplicadas para user ${userId} (payment ${paymentId})`);
       return NextResponse.json({ success: true }, { status: 200 });
     }
 
@@ -163,15 +163,15 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Erro ao salvar assinatura.' }, { status: 500 });
     }
 
-    const rechargeCredits = PLANS[planType].monthlyCredits;
-    const { error: creditsError } = await addCreditsToUser(userId, rechargeCredits, supabaseAdmin);
+    const rechargeSimulations = PLANS[planType].monthlySimulations;
+    const { error: simulationsError } = await addSimulationsToUser(userId, rechargeSimulations, supabaseAdmin);
 
-    if (creditsError) {
-      console.error('[WEBHOOK MP] Erro ao recarregar créditos da assinatura:', creditsError);
-      return NextResponse.json({ error: 'Erro ao recarregar créditos.' }, { status: 500 });
+    if (simulationsError) {
+      console.error('[WEBHOOK MP] Erro ao recarregar simulações da assinatura:', simulationsError);
+      return NextResponse.json({ error: 'Erro ao recarregar simulações.' }, { status: 500 });
     }
 
-    console.log(`[WEBHOOK MP] Assinatura ${planType} ativada para user ${userId} (+${rechargeCredits} créditos)`);
+    console.log(`[WEBHOOK MP] Assinatura ${planType} ativada para user ${userId} (+${rechargeSimulations} simulações)`);
     return NextResponse.json({ success: true }, { status: 200 });
   } catch (error: unknown) {
     console.error('[WEBHOOK MP] Erro não tratado:', error);

@@ -70,14 +70,14 @@ function AuthContent() {
   // HELPERS
   // ─────────────────────────────────────────────────────────────────────────────
 
-  const checkSubscriptionAndCredits = async (userId: string): Promise<{ hasSubscription: boolean; hasCredits: boolean }> => {
+  const checkSubscriptionAndSimulations = async (userId: string): Promise<{ hasSubscription: boolean; hasSimulations: boolean }> => {
     const { data: subscription } = await supabase
       .from('subscriptions')
       .select('status, current_period_end')
       .eq('user_id', userId)
       .maybeSingle();
 
-    if (!subscription) return { hasSubscription: false, hasCredits: false };
+    if (!subscription) return { hasSubscription: false, hasSimulations: false };
 
     const isAuthorized = subscription.status === 'authorized' || subscription.status === 'active';
     const isValidPeriod = subscription.current_period_end
@@ -85,10 +85,10 @@ function AuthContent() {
       : false;
 
     if (!isAuthorized || !isValidPeriod) {
-      return { hasSubscription: false, hasCredits: false };
+      return { hasSubscription: false, hasSimulations: false };
     }
 
-    const { data: creditRow } = await supabase
+    const { data: simulationRow } = await supabase
       .from('user_credits')
       .select('balance')
       .eq('user_id', userId)
@@ -96,7 +96,7 @@ function AuthContent() {
 
     return {
       hasSubscription: true,
-      hasCredits: (creditRow?.balance ?? 0) > 0,
+      hasSimulations: (simulationRow?.balance ?? 0) > 0,
     };
   };
 
@@ -162,15 +162,15 @@ function AuthContent() {
     }
 
     // Passo A: Checar assinatura
-    const accessStatus = await checkSubscriptionAndCredits(user.id);
+    const accessStatus = await checkSubscriptionAndSimulations(user.id);
 
     // Passo B: Se VÁLIDA → Dashboard
-    if (accessStatus.hasSubscription && accessStatus.hasCredits) {
+    if (accessStatus.hasSubscription && accessStatus.hasSimulations) {
       router.push('/dashboard');
       return;
     }
 
-    if (accessStatus.hasSubscription && !accessStatus.hasCredits) {
+    if (accessStatus.hasSubscription && !accessStatus.hasSimulations) {
       router.push('/checkout-addon');
       return;
     }

@@ -3,20 +3,20 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 
-export function useUserCredits() {
-  const [credits, setCredits] = useState<number | null>(null);
+export function useUserSimulations() {
+  const [simulations, setSimulations] = useState<number | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     let isMounted = true;
 
-    const loadCredits = async () => {
+    const loadSimulations = async () => {
       setIsLoading(true);
 
       const { data: authData } = await supabase.auth.getUser();
       if (!authData?.user) {
         if (isMounted) {
-          setCredits(null);
+          setSimulations(null);
           setIsLoading(false);
         }
         return;
@@ -29,17 +29,17 @@ export function useUserCredits() {
         .single()) as { data: { balance: number } | null; error: any };
 
       if (error) {
-        console.error('[credits] Falha ao carregar saldo:', error);
+        console.error('[simulations] Falha ao carregar saldo:', error);
       }
 
       if (isMounted) {
-        setCredits(data?.balance ?? 0);
+        setSimulations(data?.balance ?? 0);
         setIsLoading(false);
       }
     };
 
-    loadCredits();
-    const refreshInterval = setInterval(loadCredits, 30000);
+    loadSimulations();
+    const refreshInterval = setInterval(loadSimulations, 30000);
 
     return () => {
       isMounted = false;
@@ -47,5 +47,5 @@ export function useUserCredits() {
     };
   }, []);
 
-  return { credits, isLoading };
+  return { simulations, isLoading };
 }

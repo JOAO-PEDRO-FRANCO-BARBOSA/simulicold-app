@@ -6,24 +6,24 @@ interface Props {
   onStart: () => void;
   onUpsellRequired: (message: string) => void;
   hasPersona: boolean;
-  credits: number | null;
+  simulations: number | null;
 }
 
-export function CallPanelIdle({ onStart, onUpsellRequired, hasPersona, credits }: Props) {
-  const isCreditsReady = credits !== null;
-  const isCreditBlocked = isCreditsReady && credits <= 0;
-  const isBlocked = !hasPersona || !isCreditsReady || isCreditBlocked;
+export function CallPanelIdle({ onStart, onUpsellRequired, hasPersona, simulations }: Props) {
+  const areSimulationsReady = simulations !== null;
+  const isSimulationBlocked = areSimulationsReady && simulations <= 0;
+  const isBlocked = !hasPersona || !areSimulationsReady || isSimulationBlocked;
 
   const handleStartClick = () => {
     if (!hasPersona) {
       return;
     }
 
-    if (!isCreditsReady) {
+    if (!areSimulationsReady) {
       return;
     }
 
-    if (isCreditBlocked) {
+    if (isSimulationBlocked) {
       onUpsellRequired('Limite atingido!');
       return;
     }
@@ -53,7 +53,7 @@ export function CallPanelIdle({ onStart, onUpsellRequired, hasPersona, credits }
           <button 
             onClick={handleStartClick}
             aria-disabled={isBlocked}
-            title={!hasPersona ? 'Selecione um perfil de cliente antes de iniciar' : !isCreditsReady ? 'Carregando créditos...' : isCreditBlocked ? 'Limite atingido' : undefined}
+            title={!hasPersona ? 'Selecione um perfil de cliente antes de iniciar' : !areSimulationsReady ? 'Carregando simulações...' : isSimulationBlocked ? 'Limite atingido' : undefined}
             className={`flex items-center gap-3 bg-primary text-white px-10 py-4 rounded-full font-bold text-lg transition-transform shadow-[0_0_30px_rgba(219,39,119,0.25)] tracking-wide ${
               isBlocked 
                 ? 'opacity-40 cursor-not-allowed' 
@@ -70,15 +70,15 @@ export function CallPanelIdle({ onStart, onUpsellRequired, hasPersona, credits }
             </p>
           )}
 
-          {!isCreditsReady && (
+          {!areSimulationsReady && (
             <p className="text-amber-400/90 text-sm mt-4 animate-pulse font-medium text-center">
-              ⚠ Carregando créditos...
+              ⚠ Carregando simulações...
             </p>
           )}
 
-          {isCreditBlocked && (
+          {isSimulationBlocked && (
             <p className="text-amber-400/90 text-sm mt-4 animate-pulse font-medium text-center">
-              ⚠ Limite atingido. Adquira mais créditos para continuar.
+              ⚠ Limite atingido. Adquira mais simulações para continuar.
             </p>
           )}
         </div>

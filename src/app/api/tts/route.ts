@@ -6,44 +6,9 @@ import { createSupabaseServerClient, getAuthorizationToken } from '@/lib/supabas
 
 export const runtime = 'nodejs';
 
-const VOICE_MAP: Record<string, string> = {
-  default: 'pt-BR-Neural2-B',
-  masculino: 'pt-BR-Neural2-B',
-  feminino: 'pt-BR-Neural2-C',
-  assertivo: 'pt-BR-Neural2-B',
-  jovem: 'pt-BR-Neural2-B',
-};
-
-async function readUserBalanceSafely(supabase: any, userId: string): Promise<{
-  balance: number | null;
-  dbError: boolean;
-}> {
-  try {
-    const { data, error } = (await supabase
-      .from('user_credits')
-      .select('balance')
-      .eq('user_id', userId)
-      .single()) as { data: { balance: number } | null; error: any };
-
-    if (error) {
-      console.error('[TTS] Falha na leitura de creditos:', error);
-      return { balance: null, dbError: true };
-    }
-
-    if (!data || typeof data.balance !== 'number') {
-      return { balance: 0, dbError: false };
-    }
-
-    return { balance: data.balance, dbError: false };
-  } catch (error) {
-    console.error('[TTS] Excecao ao ler creditos:', error);
-    return { balance: null, dbError: true };
-  }
-}
-
 export async function POST(req: Request) {
   try {
-    const { text, voiceType, personaId, speakingRate = 1.0, pitch = 0.0 } = await req.json();
+    const { text, voiceType = 'M', speakingRate = 1.0, pitch = 0.0 } = await req.json();
 
     const supabase = await createSupabaseServerClient();
 
@@ -60,24 +25,6 @@ export async function POST(req: Request) {
     if (userError || !user) {
       return new Response(JSON.stringify({ error: 'Não autenticado.' }), {
         status: 401,
-        headers: { 'Content-Type': 'application/json' },
-      });
-    }
-
-    const { balance, dbError } = await readUserBalanceSafely(supabase as any, user.id);
-    if (dbError) {
-      return new Response(
-        JSON.stringify({ error: 'Falha de comunicação com o banco de dados.' }),
-        {
-          status: 500,
-          headers: { 'Content-Type': 'application/json' },
-        }
-      );
-    }
-
-    if (!balance || balance <= 0) {
-      return new Response(JSON.stringify({ error: 'Créditos esgotados' }), {
-        status: 402,
         headers: { 'Content-Type': 'application/json' },
       });
     }
@@ -101,7 +48,11 @@ export async function POST(req: Request) {
       });
     }
 
-    const voiceName = VOICE_MAP[voiceType] || VOICE_MAP[personaId] || VOICE_MAP.default;
+    let googleVoiceName = 'pt-BR-Neural2-B'; // Voz Masculina padrão
+
+    if (voiceType === 'F') {
+      googleVoiceName = 'pt-BR-Neural2-C'; // Voz Feminina padrão
+    }
 
     const googleResponse = await fetch(
       `https://texttospeech.googleapis.com/v1/text:synthesize?key=${apiKey}`,
@@ -114,7 +65,7 @@ export async function POST(req: Request) {
           input: { ssml: `<speak>${text}</speak>` },
           voice: {
             languageCode: 'pt-BR',
-            name: voiceName,
+            name: googleVoiceName,
           },
           audioConfig: {
             audioEncoding: 'MP3',
@@ -141,18 +92,6 @@ export async function POST(req: Request) {
     }
 
     const audioBuffer = Buffer.from(data.audioContent, 'base64');
-
-    const { error: decrementError } = await supabase.rpc('decrement_credit', {
-      user_uid: user.id,
-    });
-
-    if (decrementError) {
-      console.error('[TTS] Erro ao decrementar crédito:', decrementError);
-      return new Response(JSON.stringify({ error: 'Erro ao debitar crédito.' }), {
-        status: 500,
-        headers: { 'Content-Type': 'application/json' },
-      });
-    }
 
     return new NextResponse(audioBuffer, {
       status: 200,

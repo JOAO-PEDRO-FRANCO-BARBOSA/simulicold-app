@@ -34,7 +34,7 @@ function extractCheckoutError(error: unknown): {
   const message =
     causeItem?.description ||
     err?.message ||
-    'Erro ao gerar checkout de créditos no Mercado Pago.';
+    'Erro ao gerar checkout de simulações no Mercado Pago.';
 
   if (process.env.NODE_ENV === 'production') {
     return { message, status };
@@ -73,13 +73,13 @@ export async function POST(request: NextRequest) {
 
     if (cookieAuthError || !checkoutUser) {
       return NextResponse.json(
-        { error: 'Não autenticado. Faça login para comprar créditos.' },
+        { error: 'Não autenticado. Faça login para comprar simulações.' },
         { status: 401 }
       );
     }
 
     const body = await request.json().catch(() => ({}));
-    const addonType = (body.addonType ?? 'creditos-20') as AddonType;
+    const addonType = (body.addonType ?? 'simulacoes-20') as AddonType;
 
     if (!Object.prototype.hasOwnProperty.call(ADDON_PACKAGES, addonType)) {
       return NextResponse.json(

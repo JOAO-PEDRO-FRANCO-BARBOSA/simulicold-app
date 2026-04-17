@@ -5,37 +5,10 @@ import { createSupabaseServerClient, getAuthorizationToken } from '@/lib/supabas
 
 export const runtime = 'edge';
 
-async function readUserBalanceSafely(supabase: any, userId: string): Promise<{
-  balance: number | null;
-  dbError: boolean;
-}> {
-  try {
-    const { data, error } = (await supabase
-      .from('user_credits')
-      .select('balance')
-      .eq('user_id', userId)
-      .single()) as { data: { balance: number } | null; error: any };
-
-    if (error) {
-      console.error('[CHAT] Falha na leitura de creditos:', error);
-      return { balance: null, dbError: true };
-    }
-
-    if (!data || typeof data.balance !== 'number') {
-      return { balance: 0, dbError: false };
-    }
-
-    return { balance: data.balance, dbError: false };
-  } catch (error) {
-    console.error('[CHAT] Excecao ao ler creditos:', error);
-    return { balance: null, dbError: true };
-  }
-}
-
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    const { messages, persona_id, difficulty_level } = body;
+    const { messages, persona_id, difficulty_level, sessionId } = body;
 
     const supabase = await createSupabaseServerClient();
 
@@ -56,20 +29,9 @@ export async function POST(req: Request) {
       });
     }
 
-    const { balance, dbError } = await readUserBalanceSafely(supabase as any, user.id);
-    if (dbError) {
-      return new Response(
-        JSON.stringify({ error: 'Falha de comunicação com o banco de dados.' }),
-        {
-          status: 500,
-          headers: { 'Content-Type': 'application/json' },
-        }
-      );
-    }
-
-    if (!balance || balance <= 0) {
-      return new Response(JSON.stringify({ error: 'Créditos esgotados' }), {
-        status: 402,
+    if (!sessionId || typeof sessionId !== 'string') {
+      return new Response(JSON.stringify({ error: 'sessionId obrigatório.' }), {
+        status: 400,
         headers: { 'Content-Type': 'application/json' },
       });
     }
@@ -91,7 +53,7 @@ export async function POST(req: Request) {
     // REGRA ABSOLUTA de realismo de cold call — prepended antes de qualquer persona
     const coldCallRule = `REGRA ABSOLUTA E INQUEBRÁVEL: Você está em uma cold call telefônica real. Responda em no máximo 1 ou 2 frases curtas. Seja direto, reativo e não faça discursos. Imite a pressa de um executivo ocupado que foi interrompido. NUNCA escreva parágrafos longos.\n\n`;
 
-    const ssmlRule = `IMPORTANTE: Você deve responder utilizando a formatação SSML para parecer humano. Use a tag <break time='Xms'/> para simular pausas de respiração, hesitação ou pensamento. Exemplo de resposta: 'Olha... <break time='600ms'/> eu não sei se isso faz sentido para nós agora. <break time='400ms'/> Quanto custaria?'. Não inclua a tag <speak>; retorne apenas texto com tags SSML internas como <break/>.\n\n`;
+    const ssmlRule = `IMPORTANTE: Você deve responder utilizando a formatação SSML para parecer humano. Use a tag <break time='Xms'/> para simular pausas de respiração, hesitação ou pensamento. Exemplo de resposta: 'Olha... <break time='600ms'/> eu não sei se isso faz sentido para nós agora. <break time='400ms'/> Quanto custaria?'. Não inclua a tag <speak>; retorne apenas texto com tags SSML internas como <break/>.\nSe a conversa chegar a um fim natural (por exemplo, quando o cliente disser que vai desligar, pedir para encerrar, confirmar que não há interesse ou quando ambos se despedirem), você DEVE adicionar a exata tag [FIM_DA_LIGACAO] no final da sua resposta SSML.\n\n`;
 
     let basePrompt = ssmlRule + coldCallRule + persona.prompt_system;
 
@@ -103,6 +65,21 @@ export async function POST(req: Request) {
     };
     basePrompt += difficultyRules[difficulty_level as keyof typeof difficultyRules] || '';
 
+    const { data: canProceed, error: chargeError } = await supabase.rpc('charge_simulation', {
+      user_uid: user.id,
+      session_uid: sessionId,
+    });
+
+    if (chargeError || canProceed === false) {
+      if (chargeError) {
+        console.error('[CHAT] Erro ao cobrar simulação:', chargeError);
+      }
+      return new Response(JSON.stringify({ error: 'Simulações esgotadas' }), {
+        status: 402,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+
     // Chamada para o Gemini 2.5 Flash
     const { text } = await generateText({
       model: google('gemini-2.5-flash'), // Modelo atualizado
@@ -110,18 +87,6 @@ export async function POST(req: Request) {
       messages: messages,
       temperature: 0.8,
     });
-
-    const { error: decrementError } = await supabase.rpc('decrement_credit', {
-      user_uid: user.id,
-    });
-
-    if (decrementError) {
-      console.error('[CHAT] Erro ao decrementar crédito:', decrementError);
-      return new Response(JSON.stringify({ error: 'Erro ao debitar crédito.' }), {
-        status: 500,
-        headers: { 'Content-Type': 'application/json' },
-      });
-    }
 
     return new Response(JSON.stringify({ text }), {
       headers: { 'Content-Type': 'application/json' },

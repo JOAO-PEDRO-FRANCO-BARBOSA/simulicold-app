@@ -9,21 +9,84 @@ import { createSupabaseServerClient } from '@/lib/supabase-server';
 
 export const runtime = 'edge';
 
+type TranscriptMessage = { role: string; content: string };
+
 // Schema de saída estruturada — forçado via generateObject + zod
 const analysisSchema = z.object({
-  overall_score: z.number().min(0).max(10),
-  overall_feedback: z.string(), // Resumo conciso do desempenho geral (máx 3 frases)
+  overall_score: z.coerce.number().min(0).max(10).catch(0),
+  overall_feedback: z.string().trim().catch('Análise concluída com dados parciais devido a inconsistências na resposta estruturada.'), // Resumo conciso do desempenho geral (máx 3 frases)
   messages_feedback: z.array(z.object({
-    message_index: z.number(),   // Índice da mensagem do vendedor no array original
-    score: z.number().min(1).max(10), // Nota de 1 a 10 para esta fala
+    message_index: z.coerce.number().int().nonnegative().catch(0),   // Índice da mensagem do vendedor no array original
+    score: z.coerce.number().min(1).max(10).catch(1), // Nota de 1 a 10 para esta fala
     feedback: z.object({
-      pontos_positivos: z.array(z.string()), // Ex: ["Demonstrou autoridade", "Foi direto ao ponto"]
-      pontos_negativos: z.array(z.string()), // Ex: ["Faltou gatilho de escassez"]
-      sugestao_alternativa: z.string(),       // Texto de como a frase poderia ter sido dita
+      pontos_positivos: z.array(z.string().trim()).catch([]), // Ex: ["Demonstrou autoridade", "Foi direto ao ponto"]
+      pontos_negativos: z.array(z.string().trim()).catch([]), // Ex: ["Faltou gatilho de escassez"]
+      sugestao_alternativa: z.string().trim().catch('Busque aprofundar com uma pergunta de contexto antes de avançar para a oferta.'),       // Texto de como a frase poderia ter sido dita
+    }).catch({
+      pontos_positivos: [],
+      pontos_negativos: ['Falha ao estruturar feedback detalhado para esta fala.'],
+      sugestao_alternativa: 'Reformule sua fala usando uma pergunta SPIN mais específica para o cenário do cliente.',
     }),
-    category: z.enum(['Abertura', 'Qualificação', 'Contorno de Objeção', 'Fechamento', 'Rapport'])
-  }))
+    category: z.enum(['Abertura', 'Qualificação', 'Contorno de Objeção', 'Fechamento', 'Rapport']).catch('Rapport')
+  })).catch([])
 });
+
+type AnalysisOutput = z.infer<typeof analysisSchema>;
+
+function buildFallbackAnalysis(messages: TranscriptMessage[]): AnalysisOutput {
+  const sellerTurns = messages
+    .map((msg, index) => ({ msg, index }))
+    .filter(({ msg }) => msg.role === 'user' && msg.content.trim().length > 0);
+
+  const messagesFeedback = sellerTurns.map(({ index }) => ({
+    message_index: index,
+    score: 5,
+    feedback: {
+      pontos_positivos: [],
+      pontos_negativos: ['Não foi possível gerar avaliação detalhada desta fala com consistência estrutural.'],
+      sugestao_alternativa: 'Reestruture a fala com uma pergunta SPIN de Problema e conecte com impacto mensurável.',
+    },
+    category: 'Rapport' as const,
+  }));
+
+  return {
+    overall_score: sellerTurns.length > 0 ? 5 : 0,
+    overall_feedback:
+      'Análise devolvida em modo de segurança por inconsistência de formato. Recomendado reprocessar para obter feedback completo por framework.',
+    messages_feedback: messagesFeedback,
+  };
+}
+
+async function generateAnalysisWithRetry(
+  systemPrompt: string,
+  transcriptText: string,
+  messages: TranscriptMessage[]
+): Promise<AnalysisOutput> {
+  const temperatures = [0.2, 0.1];
+  let lastError: unknown = null;
+
+  for (const temperature of temperatures) {
+    try {
+      const { object } = await generateObject({
+        model: google('gemini-2.5-flash'),
+        schema: analysisSchema,
+        schemaName: 'SalesAnalysis',
+        schemaDescription: 'Análise estruturada de uma simulação de cold call B2B',
+        system: systemPrompt,
+        prompt: `Analise a seguinte transcrição de cold call B2B e forneça sua avaliação detalhada:\n\n${transcriptText}`,
+        temperature,
+      });
+
+      return object;
+    } catch (error) {
+      lastError = error;
+      console.error('[ANALYZE] Falha ao gerar objeto estruturado, tentando novamente:', error);
+    }
+  }
+
+  console.error('[ANALYZE] Fallback acionado após falhas de structured output:', lastError);
+  return buildFallbackAnalysis(messages);
+}
 
 const BASE_SYSTEM_PROMPT = `Você é um Treinador Sênior "Black Belt" de vendas B2B com 20 anos de experiência em cold calls corporativas.
 Sua especialidade é dissecar cada fala de um vendedor usando frameworks rigorosos de persuasão.
@@ -44,7 +107,8 @@ Seus PILARES de avaliação (use TODOS):
   * pontos_negativos: liste as falhas com referência ao framework. Ex: "Faltou pergunta de Implicação (SPIN)" ou "Não usou gatilho de Escassez (Cialdini)".
   * sugestao_alternativa: reescreva O QUE o vendedor deveria ter dito. Seja específico — escreva a frase completa como exemplo. Ex: "Em vez de falar sobre o produto, deveria ter dito: 'Marcos, quanto tempo sua equipe perde por semana com esse processo manual? Isso impacta diretamente seu custo operacional.'"
 - Não seja genérico. Se a fala foi ruim, diga EXATAMENTE o que deveria ter sido dito.
-- Escreva TUDO em português brasileiro.`;
+- Escreva TUDO em português brasileiro.
+- IMPORTANTE: Retorne APENAS o objeto JSON puro e válido. NÃO inclua blocos de markdown como triplas crases seguidas de json. Certifique-se de preencher todos os campos exigidos pelo schema.`;
 
 export async function POST(req: Request) {
   try {
@@ -85,21 +149,18 @@ export async function POST(req: Request) {
       return new Response('Array de messages é obrigatório', { status: 400 });
     }
 
+    const normalizedMessages: TranscriptMessage[] = messages.map((msg: any) => ({
+      role: msg?.role === 'user' ? 'user' : 'assistant',
+      content: typeof msg?.content === 'string' ? msg.content : String(msg?.content ?? ''),
+    }));
+
     // Formatar a transcrição para o prompt
-    const transcriptText = messages.map((msg: { role: string; content: string }, i: number) => {
+    const transcriptText = normalizedMessages.map((msg: TranscriptMessage, i: number) => {
       const label = msg.role === 'user' ? 'VENDEDOR' : 'CLIENTE';
       return `[${i}] ${label}: ${msg.content}`;
     }).join('\n');
 
-    const { object } = await generateObject({
-      model: google('gemini-2.5-flash'),
-      schema: analysisSchema,
-      schemaName: 'SalesAnalysis',
-      schemaDescription: 'Análise estruturada de uma simulação de cold call B2B',
-      system: systemPrompt,
-      prompt: `Analise a seguinte transcrição de cold call B2B e forneça sua avaliação detalhada:\n\n${transcriptText}`,
-      temperature: 0.2, // Temperatura baixa: respostas determinísticas e rápidas
-    });
+    const object = await generateAnalysisWithRetry(systemPrompt, transcriptText, normalizedMessages);
 
     return Response.json(object);
   } catch (error: any) {

@@ -8,6 +8,7 @@ interface Props {
   onEnd: () => void;
   onUpsellRequired: (message: string) => void;
   userId: string;
+  sessionId: string | null;
   personaId: string;
   difficulty: string;
   messages: { role: string, content: string }[];
@@ -20,10 +21,11 @@ const DIFFICULTY_PROSODY_MAP: Record<string, { speakingRate: number; pitch: numb
   dificil: { speakingRate: 1.15, pitch: 1.0 },
 };
 
-export function ActiveVoicePanel({ onEnd, onUpsellRequired, userId, personaId, difficulty, messages, setMessages }: Props) {
+export function ActiveVoicePanel({ onEnd, onUpsellRequired, userId, sessionId, personaId, difficulty, messages, setMessages }: Props) {
   const [timeLeft, setTimeLeft] = useState(300);
   const [waveHeights, setWaveHeights] = useState([6, 6, 6, 6, 6]);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [selectedPersona, setSelectedPersona] = useState<{ name?: string; gender?: string } | null>(null);
 
   // === Refs de controle de estado ===
   const recognitionRef = useRef<any>(null);
@@ -31,6 +33,9 @@ export function ActiveVoicePanel({ onEnd, onUpsellRequired, userId, personaId, d
   const isFetchingRef = useRef(false);
   const isSpeakingRef = useRef(false);
   const isActiveRef = useRef(true);
+  const isEndingRef = useRef(false);
+  const shouldAutoEndAfterSpeechRef = useRef(false);
+  const autoEndTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // === Web Audio API — Mixer Architecture ===
   // AudioContext compartilhado (uma única instância para tudo)
@@ -46,6 +51,20 @@ export function ActiveVoicePanel({ onEnd, onUpsellRequired, userId, personaId, d
 
   // Stream do microfone (para cleanup)
   const micStreamRef = useRef<MediaStream | null>(null);
+
+  const clearAutoEndTimeout = () => {
+    if (autoEndTimeoutRef.current) {
+      clearTimeout(autoEndTimeoutRef.current);
+      autoEndTimeoutRef.current = null;
+    }
+  };
+
+  const scheduleAutoEnd = (delayMs: number) => {
+    clearAutoEndTimeout();
+    autoEndTimeoutRef.current = setTimeout(() => {
+      void handleForceEnd();
+    }, delayMs);
+  };
 
   const stopRecognition = () => {
     if (recognitionRef.current) {
@@ -77,7 +96,9 @@ export function ActiveVoicePanel({ onEnd, onUpsellRequired, userId, personaId, d
     }
   };
 
-  const handleCreditExhausted = (message: string) => {
+  const handleSimulationExhausted = (message: string) => {
+    clearAutoEndTimeout();
+    shouldAutoEndAfterSpeechRef.current = false;
     isActiveRef.current = false;
     isSpeakingRef.current = false;
     isFetchingRef.current = false;
@@ -87,7 +108,7 @@ export function ActiveVoicePanel({ onEnd, onUpsellRequired, userId, personaId, d
     onUpsellRequired(message);
   };
 
-  const isCreditErrorStatus = (status?: number, message?: string): boolean => {
+  const isSimulationErrorStatus = (status?: number, message?: string): boolean => {
     return status === 402 || Boolean(message && message.includes('402'));
   };
 
@@ -122,6 +143,37 @@ export function ActiveVoicePanel({ onEnd, onUpsellRequired, userId, personaId, d
   useEffect(() => {
     messagesRef.current = messages;
   }, [messages]);
+
+  useEffect(() => {
+    let mounted = true;
+
+    const loadSelectedPersona = async () => {
+      if (!personaId) {
+        if (mounted) setSelectedPersona(null);
+        return;
+      }
+
+      const { data, error } = await supabase
+        .from('personas')
+        .select('name, gender')
+        .eq('id', personaId)
+        .maybeSingle();
+
+      if (error) {
+        console.error('[VOICE] Erro ao carregar persona para voz:', error);
+      }
+
+      if (mounted) {
+        setSelectedPersona(data ?? null);
+      }
+    };
+
+    loadSelectedPersona();
+
+    return () => {
+      mounted = false;
+    };
+  }, [personaId]);
 
   const formatTime = (seconds: number) => {
     const m = Math.floor(seconds / 60);
@@ -176,6 +228,12 @@ export function ActiveVoicePanel({ onEnd, onUpsellRequired, userId, personaId, d
 
     try {
       const prosody = DIFFICULTY_PROSODY_MAP[difficulty] || DIFFICULTY_PROSODY_MAP.medio;
+      const genderStr = selectedPersona?.gender?.toLowerCase() || '';
+      const isFemale =
+        genderStr.includes('f') ||
+        genderStr.includes('mulher') ||
+        Boolean(selectedPersona?.name?.includes('Fernanda'));
+      const currentVoiceType = isFemale ? 'F' : 'M';
 
       // 1. Buscar áudio da ElevenLabs via nossa rota /api/tts
       const ttsResponse = await fetch('/api/tts', {
@@ -183,6 +241,7 @@ export function ActiveVoicePanel({ onEnd, onUpsellRequired, userId, personaId, d
         headers: await getAuthHeaders(),
         body: JSON.stringify({
           text,
+          voiceType: currentVoiceType,
           personaId,
           speakingRate: prosody.speakingRate,
           pitch: prosody.pitch,
@@ -190,8 +249,8 @@ export function ActiveVoicePanel({ onEnd, onUpsellRequired, userId, personaId, d
       });
 
       if (ttsResponse.status === 402) {
-        const payload = await ttsResponse.json().catch(() => ({ error: 'Créditos esgotados' }));
-        handleCreditExhausted(payload.error || 'Créditos esgotados');
+        const payload = await ttsResponse.json().catch(() => ({ error: 'Simulações esgotadas' }));
+        handleSimulationExhausted(payload.error || 'Simulações esgotadas');
         return;
       }
 
@@ -247,6 +306,12 @@ export function ActiveVoicePanel({ onEnd, onUpsellRequired, userId, personaId, d
         isSpeakingRef.current = false;
         isFetchingRef.current = false;
 
+        if (shouldAutoEndAfterSpeechRef.current) {
+          shouldAutoEndAfterSpeechRef.current = false;
+          scheduleAutoEnd(2500);
+          return;
+        }
+
         // Retomar STT para o próximo turno do usuário
         startRecognition();
       };
@@ -255,8 +320,8 @@ export function ActiveVoicePanel({ onEnd, onUpsellRequired, userId, personaId, d
       sourceNode.start(0);
 
     } catch (err: any) {
-      if (isCreditErrorStatus(err?.status, err?.message)) {
-        handleCreditExhausted('Créditos esgotados');
+      if (isSimulationErrorStatus(err?.status, err?.message)) {
+        handleSimulationExhausted('Simulações esgotadas');
         return;
       }
 
@@ -292,11 +357,16 @@ export function ActiveVoicePanel({ onEnd, onUpsellRequired, userId, personaId, d
         throw new Error('Nenhuma persona selecionada. Volte e selecione um perfil de cliente.');
       }
 
+      if (!sessionId) {
+        throw new Error('Sessão de simulação inválida. Inicie uma nova chamada.');
+      }
+
       // ── ETAPA 1: Obter resposta da persona (PRIORIDADE MÁXIMA) ──
       const response = await fetch('/api/chat', {
         method: 'POST',
         headers: await getAuthHeaders(),
         body: JSON.stringify({
+          sessionId,
           messages: newMessages,
           persona_id: personaId,
           difficulty_level: difficulty
@@ -304,8 +374,8 @@ export function ActiveVoicePanel({ onEnd, onUpsellRequired, userId, personaId, d
       });
 
       if (response.status === 402) {
-        const payload = await response.json().catch(() => ({ error: 'Créditos esgotados' }));
-        handleCreditExhausted(payload.error || 'Créditos esgotados');
+        const payload = await response.json().catch(() => ({ error: 'Simulações esgotadas' }));
+        handleSimulationExhausted(payload.error || 'Simulações esgotadas');
         return;
       }
 
@@ -318,7 +388,14 @@ export function ActiveVoicePanel({ onEnd, onUpsellRequired, userId, personaId, d
       }
 
       const data = await response.json();
-      const botReply = data.text;
+      const rawBotReply = typeof data.text === 'string' ? data.text : '';
+      const callEnded = rawBotReply.includes('[FIM_DA_LIGACAO]');
+      const cleanBotReply = rawBotReply.replace(/\[FIM_DA_LIGACAO\]/g, '').trim();
+      const botReply = cleanBotReply || 'Certo, encerramos por aqui.';
+
+      if (callEnded) {
+        shouldAutoEndAfterSpeechRef.current = true;
+      }
 
       // ── ETAPA 2: Atualizar UI IMEDIATAMENTE ──
       const updatedMessages = [...newMessages, { role: 'assistant', content: botReply }];
@@ -329,9 +406,14 @@ export function ActiveVoicePanel({ onEnd, onUpsellRequired, userId, personaId, d
       // Não usar await para não bloquear — o áudio começa a tocar ASAP
       speak(botReply);
 
+      // Fallback: garante encerramento mesmo se o áudio não concluir evento onended.
+      if (callEnded) {
+        scheduleAutoEnd(6000);
+      }
+
     } catch (err: any) {
-      if (isCreditErrorStatus(err?.status, err?.message)) {
-        handleCreditExhausted('Créditos esgotados');
+      if (isSimulationErrorStatus(err?.status, err?.message)) {
+        handleSimulationExhausted('Simulações esgotadas');
         return;
       }
 
@@ -544,6 +626,8 @@ export function ActiveVoicePanel({ onEnd, onUpsellRequired, userId, personaId, d
     // ── CLEANUP: destruir tudo ao desmontar ──
     return () => {
       isActiveRef.current = false;
+      clearAutoEndTimeout();
+      shouldAutoEndAfterSpeechRef.current = false;
 
       // 1. Parar reconhecimento de voz
       if (recognitionRef.current) {
@@ -591,7 +675,12 @@ export function ActiveVoicePanel({ onEnd, onUpsellRequired, userId, personaId, d
   // handleForceEnd — Encerrar simulação, salvar áudio misto + transcript
   //                  + disparar análise de vendas com Gemini
   // ===================================================================
-  const handleForceEnd = async () => {
+  async function handleForceEnd() {
+    if (isEndingRef.current) return;
+    isEndingRef.current = true;
+
+    clearAutoEndTimeout();
+    shouldAutoEndAfterSpeechRef.current = false;
     isActiveRef.current = false;
     setIsProcessing(true);
 
@@ -717,7 +806,7 @@ export function ActiveVoicePanel({ onEnd, onUpsellRequired, userId, personaId, d
       setIsProcessing(false);
       onEnd(); // Retorna a interface do dashboard
     }
-  };
+  }
 
   // ===================================================================
   // RENDER

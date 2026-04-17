@@ -8,24 +8,25 @@ import { ActiveVoicePanel } from '@/components/ActiveVoicePanel';
 import { TranscriptionPanel } from '@/components/TranscriptionPanel';
 import { SupportPopup } from '@/components/SupportPopup';
 import { EndCallModal } from '@/components/EndCallModal';
-import { CreditsUpsellModal } from '@/components/CreditsUpsellModal';
+import { SimulationsUpsellModal } from '@/components/SimulationsUpsellModal';
 import { supabase } from '@/lib/supabase';
-import { useUserCredits } from '@/hooks/useUserCredits';
+import { useUserSimulations } from '@/hooks/useUserSimulations';
 
 export default function Dashboard() {
   const [callState, setCallState] = useState<'idle' | 'active' | 'ended'>('idle');
+  const [sessionId, setSessionId] = useState<string | null>(null);
   
   const [selectedPersonaId, setSelectedPersonaId] = useState('');
   const [selectedDifficulty, setSelectedDifficulty] = useState('medio');
   
   // Guardamos a sessão do Usuário logado
   const [userId, setUserId] = useState('');
-  const { credits } = useUserCredits();
+  const { simulations } = useUserSimulations();
 
   // Mensagens da Conversa (STT / Gemini)
   const [messages, setMessages] = useState<{ role: string, content: string }[]>([]);
   const [upsellModalOpen, setUpsellModalOpen] = useState(false);
-  const [upsellMessage, setUpsellMessage] = useState('Créditos esgotados');
+  const [upsellMessage, setUpsellMessage] = useState('Simulações esgotadas');
 
   const handleUpsellRequired = (message: string) => {
     setUpsellMessage(message);
@@ -43,7 +44,7 @@ export default function Dashboard() {
 
   return (
     <div className="min-h-screen bg-background flex flex-col font-sans">
-      <Header />
+      <Header onExitSimulator={() => setSessionId(null)} />
       
       <main className="flex-1 p-4 md:p-6 lg:p-8">
         <div className="max-w-[1600px] mx-auto grid grid-cols-1 lg:grid-cols-[400px_1fr] xl:grid-cols-[450px_1fr] h-full lg:h-[calc(100vh-120px)] gap-6">
@@ -56,11 +57,15 @@ export default function Dashboard() {
               />
             ) : (
               <ActiveVoicePanel 
-                onEnd={() => setCallState('ended')} 
+                onEnd={() => {
+                  setSessionId(null);
+                  setCallState('ended');
+                }}
                 onUpsellRequired={handleUpsellRequired}
                 personaId={selectedPersonaId}
                 difficulty={selectedDifficulty}
                 userId={userId}
+                sessionId={sessionId}
                 messages={messages}
                 setMessages={setMessages}
               />
@@ -70,10 +75,11 @@ export default function Dashboard() {
           <section className="h-full flex flex-col min-h-[600px]">
             {callState === 'idle' ? (
               <CallPanelIdle 
-                credits={credits}
+                simulations={simulations}
                 hasPersona={Boolean(selectedPersonaId)}
                 onUpsellRequired={handleUpsellRequired}
                 onStart={() => {
+                  setSessionId(crypto.randomUUID());
                   setMessages([]); // Reset messages on new call
                   setCallState('active');
                 }} 
@@ -89,10 +95,15 @@ export default function Dashboard() {
       <SupportPopup />
 
       {callState === 'ended' && (
-        <EndCallModal onRetry={() => setCallState('idle')} />
+        <EndCallModal
+          onRetry={() => {
+            setSessionId(null);
+            setCallState('idle');
+          }}
+        />
       )}
 
-      <CreditsUpsellModal
+      <SimulationsUpsellModal
         isOpen={upsellModalOpen}
         message={upsellMessage}
         onClose={() => setUpsellModalOpen(false)}

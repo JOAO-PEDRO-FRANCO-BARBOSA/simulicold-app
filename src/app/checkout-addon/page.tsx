@@ -26,7 +26,7 @@ export default function CheckoutAddonPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({ addonType: 'creditos-20' }),
+        body: JSON.stringify({ addonType: 'simulacoes-20' }),
       });
 
       const result = await response.json();
@@ -55,7 +55,7 @@ export default function CheckoutAddonPage() {
           </div>
 
           <h1 className="text-3xl sm:text-4xl font-bold text-white tracking-tight mb-4">
-            Seu saldo acabou.
+            Suas simulações acabaram.
           </h1>
 
           <p className="text-slate-300 text-lg leading-relaxed mb-7">
@@ -89,7 +89,7 @@ export default function CheckoutAddonPage() {
                 </>
               ) : (
                 <>
-                  Comprar +20 créditos por R$ 97
+                  Comprar +20 simulações por R$ 97
                   <ArrowRight className="w-4 h-4" />
                 </>
               )}

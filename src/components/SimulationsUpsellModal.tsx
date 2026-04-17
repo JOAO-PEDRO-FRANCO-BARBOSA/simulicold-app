@@ -3,13 +3,13 @@
 import { useState } from 'react';
 import { Coins, Loader2, X } from 'lucide-react';
 
-interface CreditsUpsellModalProps {
+interface SimulationsUpsellModalProps {
   isOpen: boolean;
   message?: string;
   onClose: () => void;
 }
 
-export function CreditsUpsellModal({ isOpen, message, onClose }: CreditsUpsellModalProps) {
+export function SimulationsUpsellModal({ isOpen, message, onClose }: SimulationsUpsellModalProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
@@ -26,7 +26,7 @@ export function CreditsUpsellModal({ isOpen, message, onClose }: CreditsUpsellMo
           'Content-Type': 'application/json',
         },
         credentials: 'include',
-        body: JSON.stringify({ addonType: 'creditos-20' }),
+        body: JSON.stringify({ addonType: 'simulacoes-20' }),
       });
 
       const result = await response.json();
@@ -62,11 +62,11 @@ export function CreditsUpsellModal({ isOpen, message, onClose }: CreditsUpsellMo
         </div>
 
         <h2 className="text-2xl sm:text-3xl font-bold text-foreground mb-3 tracking-tight">
-          Limite atingido!
+          Simulações esgotadas!
         </h2>
 
         <p className="text-foreground/70 leading-relaxed mb-2">
-          {message || 'Créditos esgotados'}
+          {message || 'Simulações esgotadas'}
         </p>
 
         <p className="text-foreground/80 leading-relaxed mb-7">
@@ -99,7 +99,7 @@ export function CreditsUpsellModal({ isOpen, message, onClose }: CreditsUpsellMo
                 Redirecionando...
               </>
             ) : (
-              'Comprar +20 créditos por R$ 97'
+              'Comprar +20 simulações por R$ 97'
             )}
           </button>
         </div>
