@@ -50,20 +50,31 @@ export async function POST(req: Request) {
       });
     }
 
+    const globalVoiceRule = `IMPORTANTE: Você é um humano em uma ligação. NUNCA utilize tags HTML, XML ou SSML (como <break>, <speak>). Use EXCLUSIVAMENTE a pontuação (vírgulas, pontos finais e reticências) para ditar as pausas e o ritmo da sua fala. Se o cliente encerrar a ligação, use a tag [FIM_DA_LIGACAO] no final.\n\n`;
+
     // REGRA ABSOLUTA de realismo de cold call — prepended antes de qualquer persona
-    const coldCallRule = `REGRA ABSOLUTA E INQUEBRÁVEL: Você está em uma cold call telefônica real. Responda em no máximo 1 ou 2 frases curtas. Seja direto, reativo e não faça discursos. Imite a pressa de um executivo ocupado que foi interrompido. NUNCA escreva parágrafos longos.\n\n`;
+    const coldCallRule = `REGRA ABSOLUTA E INQUEBRÁVEL: Você está em uma cold call telefônica real. Responda como uma pessoa real, de forma natural, direta e reativa ao contexto da ligação. Evite discursos longos e mantenha tom conversacional.\n\n`;
 
-    const ssmlRule = `IMPORTANTE: Você deve responder utilizando a formatação SSML para parecer humano. Use a tag <break time='Xms'/> para simular pausas de respiração, hesitação ou pensamento. Exemplo de resposta: 'Olha... <break time='600ms'/> eu não sei se isso faz sentido para nós agora. <break time='400ms'/> Quanto custaria?'. Não inclua a tag <speak>; retorne apenas texto com tags SSML internas como <break/>.\nSe a conversa chegar a um fim natural (por exemplo, quando o cliente disser que vai desligar, pedir para encerrar, confirmar que não há interesse ou quando ambos se despedirem), você DEVE adicionar a exata tag [FIM_DA_LIGACAO] no final da sua resposta SSML.\n\n`;
+    let difficultyInstructions = 'Comportamento: O cliente é ocupado e cético (padrão B2B). Estilo de fala: Use um tom normal, com algumas pausas pensativas utilizando reticências (...).';
 
-    let basePrompt = ssmlRule + coldCallRule + persona.prompt_system;
+    switch (difficulty_level) {
+      case 'facil':
+        difficultyInstructions = 'Comportamento: O cliente é receptivo, calmo e educado. Estilo de fala: Use frases mais longas, fluidas e pacientes.';
+        break;
+      case 'dificil':
+        difficultyInstructions = 'Comportamento: O cliente é osso duro, impaciente, arrogante e quer desligar. Estilo de fala: Use frases muito curtas, secas e cortes rápidos. Abuse de pontos finais e reticências (...) para criar impaciência e silêncios constrangedores.';
+        break;
+      case 'medio':
+      default:
+        difficultyInstructions = 'Comportamento: O cliente é ocupado e cético (padrão B2B). Estilo de fala: Use um tom normal, com algumas pausas pensativas utilizando reticências (...).';
+        break;
+    }
 
-    // Injeção de dificuldade baseada no seu schema
-    const difficultyRules = {
-      facil: '\n\n[Dificuldade: FÁCIL - Seja mais receptivo e ouça o pitch, mas ainda assim dê respostas curtas.]',
-      medio: '\n\n[Dificuldade: MÉDIO - Faça objeções comuns de B2B. Respostas secas e curtas.]',
-      dificil: '\n\n[Dificuldade: DIFÍCIL - Seja ríspido, impaciente e queira desligar rápido. Máximo 1 frase.]'
-    };
-    basePrompt += difficultyRules[difficulty_level as keyof typeof difficultyRules] || '';
+    const basePrompt =
+      globalVoiceRule +
+      coldCallRule +
+      `Nível de dificuldade atual: ${difficulty_level || 'medio'}. ${difficultyInstructions}\n\n` +
+      persona.prompt_system;
 
     const { data: canProceed, error: chargeError } = await supabase.rpc('charge_simulation', {
       user_uid: user.id,
