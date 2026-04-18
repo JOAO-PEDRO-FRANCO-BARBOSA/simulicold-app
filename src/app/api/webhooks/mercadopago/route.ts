@@ -1,10 +1,11 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import { ADDON_PACKAGES, PLANS, PlanType } from '@/lib/mercadopago';
 import { createSupabaseAdminClient } from '@/lib/supabase-server';
 
 type WebhookBody = {
   type?: string;
   topic?: string;
+  action?: string;
   data?: { id?: string };
   id?: string;
 };
@@ -32,14 +33,62 @@ type FulfillmentPackage = {
   planType: PlanType | null;
 };
 
+type ExtractedWebhookData = {
+  paymentId: string | null;
+  notificationType: string | null;
+  source: 'query' | 'body' | 'none';
+  parsedBody?: WebhookBody;
+};
+
+async function extractWebhookData(request: Request): Promise<ExtractedWebhookData> {
+  const { searchParams } = new URL(request.url);
+
+  let paymentId = searchParams.get('data.id') || searchParams.get('id');
+  let notificationType = searchParams.get('type') || searchParams.get('topic');
+  let source: ExtractedWebhookData['source'] = paymentId ? 'query' : 'none';
+
+  let parsedBody: WebhookBody | undefined;
+
+  if (!paymentId || !notificationType) {
+    const textBody = await request.text();
+    if (textBody) {
+      try {
+        parsedBody = JSON.parse(textBody) as WebhookBody;
+      } catch (parseError) {
+        console.error('[WEBHOOK MP] Body inválido (não JSON):', parseError);
+      }
+    }
+
+    const bodyPaymentId = parsedBody?.data?.id || parsedBody?.id;
+    const bodyType = parsedBody?.type || parsedBody?.topic || parsedBody?.action;
+
+    if (!paymentId && bodyPaymentId) {
+      paymentId = bodyPaymentId;
+      source = 'body';
+    }
+
+    if (!notificationType && bodyType) {
+      notificationType = bodyType;
+      if (source === 'none') source = 'body';
+    }
+  }
+
+  return {
+    paymentId,
+    notificationType,
+    source,
+    parsedBody,
+  };
+}
+
 async function getPaymentFromApi(paymentId: string): Promise<MercadoPagoPayment | null> {
-  const accessToken = process.env.MP_ACCESS_TOKEN;
+  const accessToken = process.env.MP_ACCESS_TOKEN ?? process.env.MERCADOPAGO_ACCESS_TOKEN;
   if (!accessToken) {
-    console.error('[WEBHOOK MP] MP_ACCESS_TOKEN ausente.');
+    console.error('[WEBHOOK MP] Access token ausente (MP_ACCESS_TOKEN/MERCADOPAGO_ACCESS_TOKEN).');
     return null;
   }
 
-  const response = await fetch(`https://api.mercadopago.com/v1/payments/${paymentId}`, {
+  const response = await fetch(`https://api.mercadopago.com/v1/payments/${encodeURIComponent(paymentId)}`, {
     method: 'GET',
     headers: {
       Authorization: `Bearer ${accessToken}`,
@@ -158,40 +207,46 @@ async function updateSubscriptionPeriod(
  * Rota pública — chamada automaticamente pelo Mercado Pago via IPN/Webhook.
  * Nunca deve exigir autenticação.
  */
-export async function POST(request: NextRequest) {
+export async function POST(request: Request) {
   try {
-    const body = await request.json();
-    console.log('[WEBHOOK MP] Notificação recebida:', JSON.stringify(body));
+    const extracted = await extractWebhookData(request);
 
-    const { type, topic, data } = body as WebhookBody;
-    const notificationType = type ?? topic;
+    console.log('[WEBHOOK MP] Evento recebido:', {
+      paymentId: extracted.paymentId,
+      notificationType: extracted.notificationType,
+      source: extracted.source,
+    });
 
-    if (!notificationType) {
-      return NextResponse.json({ status: 'ignored' }, { status: 200 });
+    if (
+      !extracted.paymentId ||
+      (extracted.notificationType !== 'payment' && extracted.notificationType !== 'payment.updated')
+    ) {
+      console.log('[WEBHOOK MP] Webhook ignorado: Não é payment/payment.updated ou ID ausente.');
+      return NextResponse.json({ received: true }, { status: 200 });
     }
 
-    if (notificationType !== 'payment') {
-      return NextResponse.json({ status: 'ignored' }, { status: 200 });
-    }
-
-    const paymentId = data?.id ?? body.id;
-    if (!paymentId) {
-      return NextResponse.json({ status: 'ignored' }, { status: 200 });
-    }
+    const paymentId = extracted.paymentId;
 
     const payment = await getPaymentFromApi(paymentId);
     if (!payment) {
-      return NextResponse.json({ status: 'ignored' }, { status: 200 });
+      console.error('[WEBHOOK MP] Não foi possível consultar pagamento na API do MP:', paymentId);
+      return NextResponse.json({ received: true }, { status: 200 });
     }
 
+    console.log('[WEBHOOK MP] Payment consultado:', {
+      paymentId,
+      status: payment.status,
+      externalReference: payment.external_reference,
+    });
+
     if (payment.status !== 'approved') {
-      return NextResponse.json({ success: true }, { status: 200 });
+      return NextResponse.json({ received: true }, { status: 200 });
     }
 
     const userId = payment.external_reference;
     if (!userId) {
-      console.error('[WEBHOOK MP] external_reference ausente — não é possível identificar o usuário.');
-      return NextResponse.json({ status: 'ignored' }, { status: 200 });
+      console.error(`[WEBHOOK MP] ERRO: Pagamento ${paymentId} não possui external_reference.`);
+      return NextResponse.json({ error: 'Missing external_reference' }, { status: 400 });
     }
 
     const fulfillment = resolveFulfillmentPackage(payment);
@@ -201,7 +256,7 @@ export async function POST(request: NextRequest) {
         transactionAmount: payment.transaction_amount,
         metadata: payment.metadata,
       });
-      return NextResponse.json({ status: 'ignored' }, { status: 200 });
+      return NextResponse.json({ received: true }, { status: 200 });
     }
 
     const supabaseAdmin = createSupabaseAdminClient();
@@ -209,7 +264,7 @@ export async function POST(request: NextRequest) {
 
     if (simulationsError) {
       console.error('[WEBHOOK MP] Erro ao creditar simulações:', simulationsError);
-      return NextResponse.json({ success: true }, { status: 200 });
+      return NextResponse.json({ received: true }, { status: 200 });
     }
 
     if (fulfillment.planType && fulfillment.durationDays > 0) {
@@ -223,16 +278,16 @@ export async function POST(request: NextRequest) {
 
       if (subscriptionError) {
         console.error('[WEBHOOK MP] Erro ao atualizar assinatura/expiração:', subscriptionError);
-        return NextResponse.json({ success: true }, { status: 200 });
+        return NextResponse.json({ received: true }, { status: 200 });
       }
     }
 
     console.log(
       `[WEBHOOK MP] Fulfillment aplicado user ${userId} (+${fulfillment.simulations} simulações, ${fulfillment.durationDays} dias, payment ${paymentId})`
     );
-    return NextResponse.json({ success: true }, { status: 200 });
+    return NextResponse.json({ received: true }, { status: 200 });
   } catch (error: unknown) {
-    console.error('[WEBHOOK MP] Erro não tratado:', error);
-    return NextResponse.json({ success: true }, { status: 200 });
+    console.error('[WEBHOOK MP] Erro fatal no Webhook:', error);
+    return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
   }
 }
