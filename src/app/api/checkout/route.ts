@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createSupabaseServerClient, getAuthorizationToken } from '@/lib/supabase-server';
-import { preApprovalClient, PLANS, PlanType } from '@/lib/mercadopago';
+import { preferenceClient, PLANS, PlanType } from '@/lib/mercadopago';
 import { PLAN_TYPES } from '@/lib/pricing';
 
 function normalizeSiteUrl(raw: string | undefined): string {
@@ -97,36 +97,53 @@ export async function POST(request: NextRequest) {
 
     if (!checkoutUser.email) {
       return NextResponse.json(
-        { error: 'Conta sem e-mail válido para gerar assinatura no Mercado Pago.' },
+        { error: 'Conta sem e-mail válido para gerar cobrança no Mercado Pago.' },
         { status: 400 }
       );
     }
 
-    // 4. Criar PreApproval (assinatura recorrente) no Mercado Pago
-    const preApproval = await preApprovalClient.create({
+    const preference = await preferenceClient.create({
       body: {
-        reason: plan.label,
-        auto_recurring: {
-          frequency: plan.frequency,
-          frequency_type: 'months',
-          transaction_amount: plan.price,
-          currency_id: 'BRL',
+        items: [
+          {
+            id: planType,
+            title: plan.label,
+            description: plan.description,
+            quantity: 1,
+            currency_id: 'BRL',
+            unit_price: plan.price,
+          },
+        ],
+        payer: {
+          email: checkoutUser.email,
         },
-        back_url: `${siteUrl}/login?payment=success`,
-        // external_reference mapeia o user_id do Supabase para o webhook
         external_reference: checkoutUser.id,
-        payer_email: checkoutUser.email,
-        status: 'pending',
+        back_urls: {
+          success: `${siteUrl}/dashboard`,
+          pending: `${siteUrl}/dashboard`,
+          failure: `${siteUrl}/dashboard`,
+        },
+        auto_return: 'approved',
+        metadata: {
+          flow: 'time_package',
+          planType,
+          simulations: plan.monthlySimulations,
+          durationDays: plan.frequency * 30,
+        },
+        notification_url: `${siteUrl}/api/webhooks/mercadopago`,
       },
     });
 
-    if (!preApproval.init_point) {
+    if (!preference.init_point) {
       throw new Error('Mercado Pago não retornou um link de pagamento.');
     }
 
-    return NextResponse.json({ init_point: preApproval.init_point });
+    return NextResponse.json({
+      init_point: preference.init_point,
+      url: preference.init_point,
+    });
   } catch (error: unknown) {
-    console.error('[CHECKOUT] Erro ao criar PreApproval:', error);
+    console.error('[CHECKOUT] Erro ao criar Preference:', error);
     const extracted = extractCheckoutError(error);
     return NextResponse.json(
       {

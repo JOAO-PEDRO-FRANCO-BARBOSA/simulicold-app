@@ -1,4 +1,4 @@
-import MercadoPagoConfig, { Payment, PreApproval, Preference } from 'mercadopago';
+import MercadoPagoConfig, { Payment, PreApproval, PreApprovalPlan, Preference } from 'mercadopago';
 import { ADDON_PRICING, type AddonType, PLAN_PRICING, type PlanType } from '@/lib/pricing';
 
 // Instância global reutilizável do SDK Mercado Pago
@@ -8,6 +8,7 @@ export const mpClient = new MercadoPagoConfig({
 });
 
 export const preApprovalClient = new PreApproval(mpClient);
+export const preApprovalPlanClient = new PreApprovalPlan(mpClient);
 export const preferenceClient = new Preference(mpClient);
 export const paymentClient = new Payment(mpClient);
 
@@ -31,8 +32,9 @@ export interface AddonConfig {
 export const PLANS: Record<PlanType, PlanConfig> = {
   mensal: {
     label: 'Plano Mensal — Simulicold',
-    // price: PLAN_PRICING.mensal.price,
-    price: 3.0, // preço de teste - R$1,00
+    // price: 
+    // PLAN_PRICING.mensal.price,
+    price: 0.5, // preço de teste - R$1,00
     frequency: PLAN_PRICING.mensal.frequency,
     description: 'Acesso mensal ao Simulicold — renovação automática',
     monthlySimulations: PLAN_PRICING.mensal.monthlySimulations,

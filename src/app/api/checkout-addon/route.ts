@@ -114,6 +114,10 @@ export async function POST(request: NextRequest) {
           email: checkoutUser.email,
         },
         external_reference: checkoutUser.id,
+        metadata: {
+          flow: 'addon_purchase',
+          addonType,
+        },
         back_urls: {
           success: `${siteUrl}/dashboard`,
           pending: `${siteUrl}/dashboard`,

@@ -79,12 +79,12 @@ export default function PricingSection() {
         throw new Error(result.error || 'Erro ao gerar link de pagamento.');
       }
 
-      if (!result.init_point) {
+      if (!result.url) {
         throw new Error('Link de pagamento não encontrado na resposta.');
       }
 
       // 3. Redirecionar para o checkout do Mercado Pago
-      window.location.href = result.init_point;
+      window.location.href = result.url;
     } catch (err: unknown) {
       const message =
         err instanceof Error ? err.message : 'Ocorreu um erro inesperado.';

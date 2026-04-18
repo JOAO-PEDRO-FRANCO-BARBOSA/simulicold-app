@@ -1,12 +1,101 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { ADDON_PACKAGES, paymentClient, PLANS, PlanType, preApprovalClient } from '@/lib/mercadopago';
+import { ADDON_PACKAGES, PLANS, PlanType } from '@/lib/mercadopago';
 import { createSupabaseAdminClient } from '@/lib/supabase-server';
 
 type WebhookBody = {
   type?: string;
+  topic?: string;
   data?: { id?: string };
   id?: string;
 };
+
+type PaymentMetadata = {
+  flow?: string;
+  planType?: string;
+  addonType?: string;
+  simulations?: number;
+  durationDays?: number;
+};
+
+type MercadoPagoPayment = {
+  id: string | number;
+  status?: string;
+  external_reference?: string;
+  transaction_amount?: number | null;
+  payer_id?: string | number | null;
+  metadata?: PaymentMetadata;
+};
+
+type FulfillmentPackage = {
+  simulations: number;
+  durationDays: number;
+  planType: PlanType | null;
+};
+
+async function getPaymentFromApi(paymentId: string): Promise<MercadoPagoPayment | null> {
+  const accessToken = process.env.MP_ACCESS_TOKEN;
+  if (!accessToken) {
+    console.error('[WEBHOOK MP] MP_ACCESS_TOKEN ausente.');
+    return null;
+  }
+
+  const response = await fetch(`https://api.mercadopago.com/v1/payments/${paymentId}`, {
+    method: 'GET',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      'Content-Type': 'application/json',
+    },
+  });
+
+  if (!response.ok) {
+    const payload = await response.text().catch(() => '');
+    console.error('[WEBHOOK MP] Falha ao buscar payment na API:', response.status, payload);
+    return null;
+  }
+
+  return (await response.json()) as MercadoPagoPayment;
+}
+
+function resolveFulfillmentPackage(payment: MercadoPagoPayment): FulfillmentPackage | null {
+  const metadata = payment.metadata;
+
+  if (metadata?.planType && metadata.planType in PLANS) {
+    const planType = metadata.planType as PlanType;
+    const plan = PLANS[planType];
+    return {
+      planType,
+      simulations: typeof metadata.simulations === 'number' ? metadata.simulations : plan.monthlySimulations,
+      durationDays: typeof metadata.durationDays === 'number' ? metadata.durationDays : plan.frequency * 30,
+    };
+  }
+
+  if (metadata?.addonType && metadata.addonType in ADDON_PACKAGES) {
+    const addonType = metadata.addonType as keyof typeof ADDON_PACKAGES;
+    return {
+      planType: null,
+      simulations: ADDON_PACKAGES[addonType].simulations,
+      durationDays: 0,
+    };
+  }
+
+  const transactionAmount = payment.transaction_amount;
+  const normalizedAmount =
+    typeof transactionAmount === 'number' ? Number(transactionAmount.toFixed(2)) : null;
+
+  const matchedPlanEntry = (Object.entries(PLANS) as Array<[PlanType, (typeof PLANS)[PlanType]]>)
+    .find(([, config]) => Number(config.price.toFixed(2)) === normalizedAmount);
+
+  if (!matchedPlanEntry) {
+    return null;
+  }
+
+  const [planType, plan] = matchedPlanEntry;
+  return {
+    planType,
+    simulations: plan.monthlySimulations,
+    durationDays: plan.frequency * 30,
+  };
+}
 
 async function addSimulationsToUser(
   userId: string,
@@ -16,7 +105,7 @@ async function addSimulationsToUser(
   const { data: currentSimulations, error: readError } = await supabaseAdmin
     .from('user_credits')
     .select('balance')
-    .eq('user_uid', userId)
+    .eq('user_id', userId)
     .maybeSingle();
 
   if (readError && readError.code !== 'PGRST116') {
@@ -29,11 +118,38 @@ async function addSimulationsToUser(
     .from('user_credits')
     .upsert(
       {
-        user_uid: userId,
+        user_id: userId,
         balance: nextBalance,
       },
       {
-        onConflict: 'user_uid',
+        onConflict: 'user_id',
+      }
+    );
+}
+
+async function updateSubscriptionPeriod(
+  userId: string,
+  planType: PlanType,
+  payerId: string,
+  durationDays: number,
+  supabaseAdmin = createSupabaseAdminClient()
+) {
+  const periodEnd = new Date();
+  periodEnd.setDate(periodEnd.getDate() + durationDays);
+
+  return supabaseAdmin
+    .from('subscriptions')
+    .upsert(
+      {
+        user_id: userId,
+        plan_type: planType,
+        status: 'active',
+        mp_payer_id: payerId,
+        current_period_end: periodEnd.toISOString(),
+        updated_at: new Date().toISOString(),
+      },
+      {
+        onConflict: 'user_id',
       }
     );
 }
@@ -47,150 +163,76 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     console.log('[WEBHOOK MP] Notificação recebida:', JSON.stringify(body));
 
-    const { type, data } = body as WebhookBody;
+    const { type, topic, data } = body as WebhookBody;
+    const notificationType = type ?? topic;
 
-    if (!type) {
+    if (!notificationType) {
       return NextResponse.json({ status: 'ignored' }, { status: 200 });
     }
 
-    // Processamento de pagamentos únicos (pacote avulso)
-    if (type === 'payment') {
-      const paymentId = data?.id;
-      if (!paymentId) {
-        return NextResponse.json({ status: 'ignored' }, { status: 200 });
-      }
-
-      const payment = await paymentClient.get({ id: paymentId });
-      if (payment.status !== 'approved') {
-        return NextResponse.json({ success: true }, { status: 200 });
-      }
-
-      const userId = payment.external_reference;
-      if (!userId) {
-        console.error('[WEBHOOK MP] payment aprovado sem external_reference:', paymentId);
-        return NextResponse.json({ status: 'ignored' }, { status: 200 });
-      }
-
-      const supabaseAdmin = createSupabaseAdminClient();
-      const addonSimulations = ADDON_PACKAGES['simulacoes-20'].simulations;
-      const { error: simulationsError } = await addSimulationsToUser(userId, addonSimulations, supabaseAdmin);
-
-      if (simulationsError) {
-        console.error('[WEBHOOK MP] Erro ao somar simulações avulsas:', simulationsError);
-        return NextResponse.json({ error: 'Erro ao creditar pacote avulso.' }, { status: 500 });
-      }
-
-      console.log(`[WEBHOOK MP] +${addonSimulations} simulações aplicadas para user ${userId} (payment ${paymentId})`);
-      return NextResponse.json({ success: true }, { status: 200 });
-    }
-
-    // Aceitar tanto IPN (type=preapproval) quanto notificações antigas (id direto)
-    if (type !== 'preapproval' && type !== 'subscription_preapproval') {
+    if (notificationType !== 'payment') {
       return NextResponse.json({ status: 'ignored' }, { status: 200 });
     }
 
-    const preapprovalId = data?.id;
-    if (!preapprovalId) {
-      return NextResponse.json(
-        { error: 'ID da notificação ausente.' },
-        { status: 400 }
-      );
+    const paymentId = data?.id ?? body.id;
+    if (!paymentId) {
+      return NextResponse.json({ status: 'ignored' }, { status: 200 });
     }
 
-    // 1. Buscar detalhes completos da assinatura no Mercado Pago
-    const preApproval = await preApprovalClient.get({ id: preapprovalId });
+    const payment = await getPaymentFromApi(paymentId);
+    if (!payment) {
+      return NextResponse.json({ status: 'ignored' }, { status: 200 });
+    }
 
-    console.log('[WEBHOOK MP] Status da assinatura:', preApproval.status);
-    console.log('[WEBHOOK MP] external_reference:', preApproval.external_reference);
-
-    // 2. Validar que foi aprovada
-    if (preApproval.status !== 'authorized') {
-      // Pode ser cancelled, paused, pending — registrar mas não ativar
-      const supabaseAdmin = createSupabaseAdminClient();
-      if (preApproval.external_reference) {
-        await supabaseAdmin
-          .from('subscriptions')
-          .update({
-            status: preApproval.status ?? 'pending',
-            updated_at: new Date().toISOString(),
-          })
-          .eq('mp_preapproval_id', preapprovalId);
-      }
+    if (payment.status !== 'approved') {
       return NextResponse.json({ success: true }, { status: 200 });
     }
 
-    // 3. Extrair dados necessários
-    const userId = preApproval.external_reference; // user_id do Supabase
+    const userId = payment.external_reference;
     if (!userId) {
       console.error('[WEBHOOK MP] external_reference ausente — não é possível identificar o usuário.');
-      return NextResponse.json({ error: 'external_reference ausente.' }, { status: 422 });
+      return NextResponse.json({ status: 'ignored' }, { status: 200 });
     }
 
-    // 4. Determinar o plano pelo valor da transação sem fallback silencioso
-    const transactionAmount = preApproval.auto_recurring?.transaction_amount;
-    const normalizedAmount =
-      typeof transactionAmount === 'number'
-        ? Number(transactionAmount.toFixed(2))
-        : null;
-
-    const matchedPlanEntry = (Object.entries(PLANS) as Array<[PlanType, (typeof PLANS)[PlanType]]>)
-      .find(([, config]) => Number(config.price.toFixed(2)) === normalizedAmount);
-
-    if (!matchedPlanEntry) {
-      console.error('[WEBHOOK MP] Valor de transação não mapeado para plano:', {
-        preapprovalId,
-        transactionAmount,
+    const fulfillment = resolveFulfillmentPackage(payment);
+    if (!fulfillment) {
+      console.error('[WEBHOOK MP] payment aprovado sem pacote reconhecido:', {
+        paymentId,
+        transactionAmount: payment.transaction_amount,
+        metadata: payment.metadata,
       });
-      return NextResponse.json(
-        { error: 'Valor de assinatura nao reconhecido.' },
-        { status: 422 }
-      );
+      return NextResponse.json({ status: 'ignored' }, { status: 200 });
     }
 
-    const [planType] = matchedPlanEntry;
-
-    // 5. Calcular current_period_end
-    const frequencyMonths = PLANS[planType].frequency;
-    const periodEnd = new Date();
-    periodEnd.setMonth(periodEnd.getMonth() + frequencyMonths);
-
-    // 6. Upsert na tabela subscriptions via Admin client (bypassa RLS)
     const supabaseAdmin = createSupabaseAdminClient();
-    const { error: dbError } = await supabaseAdmin
-      .from('subscriptions')
-      .upsert(
-        {
-          user_id: userId,
-          plan_type: planType,
-          status: 'active',
-          mp_preapproval_id: preapprovalId,
-          mp_payer_id: String(preApproval.payer_id ?? ''),
-          current_period_end: periodEnd.toISOString(),
-          updated_at: new Date().toISOString(),
-        },
-        {
-          onConflict: 'mp_preapproval_id',
-        }
-      );
-
-    if (dbError) {
-      console.error('[WEBHOOK MP] Erro ao salvar no Supabase:', dbError);
-      // Retorna 500 para que o MP tente reenviar a notificação
-      return NextResponse.json({ error: 'Erro ao salvar assinatura.' }, { status: 500 });
-    }
-
-    const rechargeSimulations = PLANS[planType].monthlySimulations;
-    const { error: simulationsError } = await addSimulationsToUser(userId, rechargeSimulations, supabaseAdmin);
+    const { error: simulationsError } = await addSimulationsToUser(userId, fulfillment.simulations, supabaseAdmin);
 
     if (simulationsError) {
-      console.error('[WEBHOOK MP] Erro ao recarregar simulações da assinatura:', simulationsError);
-      return NextResponse.json({ error: 'Erro ao recarregar simulações.' }, { status: 500 });
+      console.error('[WEBHOOK MP] Erro ao creditar simulações:', simulationsError);
+      return NextResponse.json({ success: true }, { status: 200 });
     }
 
-    console.log(`[WEBHOOK MP] Assinatura ${planType} ativada para user ${userId} (+${rechargeSimulations} simulações)`);
+    if (fulfillment.planType && fulfillment.durationDays > 0) {
+      const { error: subscriptionError } = await updateSubscriptionPeriod(
+        userId,
+        fulfillment.planType,
+        String(payment.payer_id ?? ''),
+        fulfillment.durationDays,
+        supabaseAdmin
+      );
+
+      if (subscriptionError) {
+        console.error('[WEBHOOK MP] Erro ao atualizar assinatura/expiração:', subscriptionError);
+        return NextResponse.json({ success: true }, { status: 200 });
+      }
+    }
+
+    console.log(
+      `[WEBHOOK MP] Fulfillment aplicado user ${userId} (+${fulfillment.simulations} simulações, ${fulfillment.durationDays} dias, payment ${paymentId})`
+    );
     return NextResponse.json({ success: true }, { status: 200 });
   } catch (error: unknown) {
     console.error('[WEBHOOK MP] Erro não tratado:', error);
-    return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+    return NextResponse.json({ success: true }, { status: 200 });
   }
 }
