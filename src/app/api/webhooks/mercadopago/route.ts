@@ -182,23 +182,24 @@ async function updateSubscriptionPeriod(
   durationDays: number,
   supabaseAdmin = createSupabaseAdminClient()
 ) {
-  const periodEnd = new Date();
-  periodEnd.setDate(periodEnd.getDate() + durationDays);
+  const now = new Date();
+  const periodEnd = new Date(now);
+  periodEnd.setDate(now.getDate() + durationDays);
+
+  const subscriptionPayload = {
+    user_id: userId,
+    status: 'active',
+    plan_type: planType,
+    current_period_start: now.toISOString(),
+    current_period_end: periodEnd.toISOString(),
+    updated_at: now.toISOString(),
+  };
 
   return supabaseAdmin
     .from('subscriptions')
-    .upsert(
-      {
-        user_id: userId,
-        plan_type: planType,
-        status: 'active',
-        current_period_end: periodEnd.toISOString(),
-        updated_at: new Date().toISOString(),
-      },
-      {
-        onConflict: 'user_id',
-      }
-    );
+    .upsert(subscriptionPayload, {
+      onConflict: 'user_id',
+    });
 }
 
 /**
