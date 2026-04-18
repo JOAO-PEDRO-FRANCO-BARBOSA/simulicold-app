@@ -179,7 +179,6 @@ async function addSimulationsToUser(
 async function updateSubscriptionPeriod(
   userId: string,
   planType: PlanType,
-  payerId: string,
   durationDays: number,
   supabaseAdmin = createSupabaseAdminClient()
 ) {
@@ -193,7 +192,6 @@ async function updateSubscriptionPeriod(
         user_id: userId,
         plan_type: planType,
         status: 'active',
-        mp_payer_id: payerId,
         current_period_end: periodEnd.toISOString(),
         updated_at: new Date().toISOString(),
       },
@@ -271,13 +269,16 @@ export async function POST(request: Request) {
       const { error: subscriptionError } = await updateSubscriptionPeriod(
         userId,
         fulfillment.planType,
-        String(payment.payer_id ?? ''),
         fulfillment.durationDays,
         supabaseAdmin
       );
 
       if (subscriptionError) {
-        console.error('[WEBHOOK MP] Erro ao atualizar assinatura/expiração:', subscriptionError);
+        console.error('[WEBHOOK MP] Erro ao atualizar assinatura/expiração:', {
+          paymentId,
+          userId,
+          subscriptionError,
+        });
         return NextResponse.json({ received: true }, { status: 200 });
       }
     }
