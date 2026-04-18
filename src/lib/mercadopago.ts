@@ -31,7 +31,8 @@ export interface AddonConfig {
 export const PLANS: Record<PlanType, PlanConfig> = {
   mensal: {
     label: 'Plano Mensal — Simulicold',
-    price: PLAN_PRICING.mensal.price,
+    // price: PLAN_PRICING.mensal.price,
+    price: 0.5, // preço de teste - R$1,00
     frequency: PLAN_PRICING.mensal.frequency,
     description: 'Acesso mensal ao Simulicold — renovação automática',
     monthlySimulations: PLAN_PRICING.mensal.monthlySimulations,
