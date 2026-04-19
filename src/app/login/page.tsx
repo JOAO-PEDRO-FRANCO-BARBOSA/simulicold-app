@@ -3,7 +3,7 @@
 import { useState, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Mail, Lock, ArrowRight, UserPlus, AlertCircle, RefreshCw, Eye, EyeOff, Loader2 } from 'lucide-react';
-import { supabase } from '@/lib/supabase';
+import { createClient } from '@/lib/supabase/client';
 
 const DEV_BYPASS_EMAIL = 'francojoao512@gmail.com';
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
@@ -12,6 +12,7 @@ const STRONG_PASSWORD_REGEX = /^(?=.*[A-Za-z])(?=.*\d).{8,}$/;
 function AuthContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const supabase = createClient();
   
   const [isLogin, setIsLogin] = useState(() => {
     return !searchParams.has('register');
