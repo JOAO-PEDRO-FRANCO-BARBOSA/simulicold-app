@@ -18,6 +18,10 @@ function mapAuthCallbackError(errorParam: string | null): string {
     return 'Link de recuperacao invalido. Solicite um novo e-mail.';
   }
 
+  if (errorParam === 'reset_session_not_found') {
+    return 'Sessao de recuperacao nao encontrada. Solicite um novo link.';
+  }
+
   const normalized = errorParam.toLowerCase();
   if (normalized.includes('pkce') || normalized.includes('code verifier')) {
     return 'Nao foi possivel validar o link de recuperacao. Solicite um novo e-mail e tente novamente.';

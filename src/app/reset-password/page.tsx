@@ -1,12 +1,13 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { Lock, Eye, EyeOff, Loader2, ArrowRight, AlertCircle } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 
 export default function ResetPasswordPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const supabase = useMemo(() => createClient(), []);
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -40,6 +41,18 @@ export default function ResetPasswordPage() {
 
     const ensureSession = async () => {
       try {
+        const code = searchParams.get('code');
+        if (code) {
+          const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
+          if (exchangeError) {
+            if (isMounted) {
+              setErrorMsg('Nao foi possivel validar o link de recuperacao. Solicite um novo e-mail.');
+            }
+            router.replace(`/login?error=${encodeURIComponent(exchangeError.message)}`);
+            return;
+          }
+        }
+
         const retryDelays = [0, 150, 300, 600];
 
         for (const delay of retryDelays) {
@@ -90,7 +103,7 @@ export default function ResetPasswordPage() {
       isMounted = false;
       subscription.unsubscribe();
     };
-  }, [router, supabase]);
+  }, [router, searchParams, supabase]);
 
   const handleResetPassword = async (e: React.FormEvent) => {
     e.preventDefault();
