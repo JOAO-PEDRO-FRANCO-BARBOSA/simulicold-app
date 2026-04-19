@@ -1,13 +1,12 @@
 'use client';
 
-import { Suspense, useEffect, useState } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { Lock, Eye, EyeOff, Loader2, ArrowRight, AlertCircle } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 
-function ResetPasswordForm() {
+export default function ResetPasswordPage() {
   const router = useRouter();
-  const searchParams = useSearchParams();
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showNewPassword, setShowNewPassword] = useState(false);
@@ -19,38 +18,8 @@ function ResetPasswordForm() {
   useEffect(() => {
     let isMounted = true;
 
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((event, session) => {
-      if (!isMounted) {
-        return;
-      }
-
-      if (event === 'SIGNED_IN' && session?.user) {
-        setLoading(false);
-        return;
-      }
-
-      if (event === 'SIGNED_OUT') {
-        router.replace('/login');
-      }
-    });
-
     const ensureSession = async () => {
       try {
-        const code = searchParams.get('code');
-
-        if (code) {
-          const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
-          if (exchangeError) {
-            if (isMounted) {
-              setErrorMsg('Codigo invalido ou expirado. Solicite um novo link de recuperacao.');
-            }
-            router.replace('/login');
-            return;
-          }
-        }
-
         const {
           data: { user },
           error: userError,
@@ -84,9 +53,8 @@ function ResetPasswordForm() {
 
     return () => {
       isMounted = false;
-      subscription.unsubscribe();
     };
-  }, [router, searchParams]);
+  }, [router]);
 
   const handleResetPassword = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -210,13 +178,5 @@ function ResetPasswordForm() {
         </div>
       </div>
     </div>
-  );
-}
-
-export default function ResetPasswordPage() {
-  return (
-    <Suspense fallback={<div className="flex min-h-screen items-center justify-center">Carregando validação de segurança...</div>}>
-      <ResetPasswordForm />
-    </Suspense>
   );
 }

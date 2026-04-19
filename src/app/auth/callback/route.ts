@@ -5,12 +5,12 @@ import { cookies } from 'next/headers';
 export async function GET(request: Request) {
   const { searchParams, origin } = new URL(request.url);
   const code = searchParams.get('code');
-  const next = searchParams.get('next');
+  const next = searchParams.get('next') ?? '/reset-password';
 
   const safeNext =
     next && next.startsWith('/') && !next.startsWith('//')
       ? next
-      : '/login?verified=true';
+      : '/reset-password';
 
   if (code) {
     const cookieStore = await cookies();
@@ -42,10 +42,7 @@ export async function GET(request: Request) {
     } else {
       console.error('[AUTH_CALLBACK] Erro trocando token:', error);
     }
-  } else if (safeNext === '/reset-password') {
-    return NextResponse.redirect(new URL(safeNext, origin));
   }
 
-  // Falhou -> devolve pro login com erro silencioso na url opcional
-  return NextResponse.redirect(`${origin}/login?error=invalid_token`);
+  return NextResponse.redirect(`${origin}/login?error=auth-code-error`);
 }
