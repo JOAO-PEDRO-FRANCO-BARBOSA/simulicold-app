@@ -1,63 +1,92 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { Lock, Eye, EyeOff, Loader2, ArrowRight, AlertCircle } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 
 export default function ResetPasswordPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [checkingSession, setCheckingSession] = useState(true);
+  const [loading, setLoading] = useState(true);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
 
   useEffect(() => {
-    let cancelled = false;
-    let authSubscription: { unsubscribe: () => void } | null = null;
+    let isMounted = true;
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((event, session) => {
+      if (!isMounted) {
+        return;
+      }
+
+      if (event === 'SIGNED_IN' && session?.user) {
+        setLoading(false);
+        return;
+      }
+
+      if (event === 'SIGNED_OUT') {
+        router.replace('/login');
+      }
+    });
 
     const ensureSession = async () => {
-      const { data } = await supabase.auth.getUser();
+      try {
+        const code = searchParams.get('code');
 
-      if (cancelled) {
-        return;
-      }
-
-      if (data.user) {
-        setCheckingSession(false);
-        return;
-      }
-
-      const {
-        data: { subscription },
-      } = supabase.auth.onAuthStateChange((event, session) => {
-        if (cancelled) {
-          return;
+        if (code) {
+          const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
+          if (exchangeError) {
+            if (isMounted) {
+              setErrorMsg('Codigo invalido ou expirado. Solicite um novo link de recuperacao.');
+            }
+            router.replace('/login');
+            return;
+          }
         }
 
-        if (event === 'SIGNED_IN' && session?.user) {
-          setCheckingSession(false);
-          return;
-        }
+        const {
+          data: { user },
+          error: userError,
+        } = await supabase.auth.getUser();
 
-        if (event === 'SIGNED_OUT') {
+        if (userError) {
+          if (isMounted) {
+            setErrorMsg('Nao foi possivel validar sua sessao de recuperacao.');
+          }
           router.replace('/login');
+          return;
         }
-      });
 
-      authSubscription = subscription;
+        if (!user) {
+          router.replace('/login');
+          return;
+        }
+      } catch {
+        if (isMounted) {
+          setErrorMsg('Erro ao processar o link de recuperacao.');
+        }
+        router.replace('/login');
+      } finally {
+        if (isMounted) {
+          setLoading(false);
+        }
+      }
     };
 
     void ensureSession();
 
     return () => {
-      cancelled = true;
-      authSubscription?.unsubscribe();
+      isMounted = false;
+      subscription.unsubscribe();
     };
-  }, [router]);
+  }, [router, searchParams]);
 
   const handleResetPassword = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -73,20 +102,23 @@ export default function ResetPasswordPage() {
       return;
     }
 
-    setLoading(true);
+    try {
+      setIsSubmitting(true);
 
-    const { error } = await supabase.auth.updateUser({ password: newPassword });
+      const { error } = await supabase.auth.updateUser({ password: newPassword });
 
-    if (error) {
-      setErrorMsg(error.message);
-      setLoading(false);
-      return;
+      if (error) {
+        setErrorMsg(error.message);
+        return;
+      }
+
+      router.push('/login');
+    } finally {
+      setIsSubmitting(false);
     }
-
-    router.push('/password-reset-success');
   };
 
-  if (checkingSession) {
+  if (loading) {
     return (
       <div className="min-h-screen bg-[#070b14] flex items-center justify-center">
         <Loader2 className="w-8 h-8 text-blue-500 animate-spin" />
@@ -168,11 +200,11 @@ export default function ResetPasswordPage() {
 
             <button
               type="submit"
-              disabled={loading}
+              disabled={isSubmitting}
               className="w-full bg-blue-600 hover:bg-blue-500 text-white py-3.5 rounded-xl font-bold transition-colors flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {loading ? 'Atualizando...' : 'Atualizar senha'}
-              {!loading && <ArrowRight className="w-4 h-4" />}
+              {isSubmitting ? 'Atualizando...' : 'Atualizar senha'}
+              {!isSubmitting && <ArrowRight className="w-4 h-4" />}
             </button>
           </form>
         </div>
