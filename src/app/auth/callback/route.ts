@@ -42,6 +42,8 @@ export async function GET(request: Request) {
     } else {
       console.error('[AUTH_CALLBACK] Erro trocando token:', error);
     }
+  } else if (safeNext === '/reset-password') {
+    return NextResponse.redirect(new URL(safeNext, origin));
   }
 
   // Falhou -> devolve pro login com erro silencioso na url opcional

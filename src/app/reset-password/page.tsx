@@ -16,20 +16,47 @@ export default function ResetPasswordPage() {
   const [errorMsg, setErrorMsg] = useState('');
 
   useEffect(() => {
-    const ensureSession = async () => {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
+    let cancelled = false;
+    let authSubscription: { unsubscribe: () => void } | null = null;
 
-      if (!user) {
-        router.replace('/login');
+    const ensureSession = async () => {
+      const { data } = await supabase.auth.getUser();
+
+      if (cancelled) {
         return;
       }
 
-      setCheckingSession(false);
+      if (data.user) {
+        setCheckingSession(false);
+        return;
+      }
+
+      const {
+        data: { subscription },
+      } = supabase.auth.onAuthStateChange((event, session) => {
+        if (cancelled) {
+          return;
+        }
+
+        if (event === 'SIGNED_IN' && session?.user) {
+          setCheckingSession(false);
+          return;
+        }
+
+        if (event === 'SIGNED_OUT') {
+          router.replace('/login');
+        }
+      });
+
+      authSubscription = subscription;
     };
 
-    ensureSession();
+    void ensureSession();
+
+    return () => {
+      cancelled = true;
+      authSubscription?.unsubscribe();
+    };
   }, [router]);
 
   const handleResetPassword = async (e: React.FormEvent) => {
