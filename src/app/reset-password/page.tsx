@@ -1,13 +1,13 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Lock, Eye, EyeOff, Loader2, ArrowRight, AlertCircle } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 
 export default function ResetPasswordPage() {
   const router = useRouter();
-  const supabase = createClient();
+  const supabase = useMemo(() => createClient(), []);
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showNewPassword, setShowNewPassword] = useState(false);
@@ -18,24 +18,58 @@ export default function ResetPasswordPage() {
 
   useEffect(() => {
     let isMounted = true;
+    let hasResolvedSession = false;
+
+    const wait = (ms: number) =>
+      new Promise<void>((resolve) => {
+        setTimeout(resolve, ms);
+      });
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((event, session) => {
+      if (!isMounted || hasResolvedSession) {
+        return;
+      }
+
+      if (event === 'SIGNED_IN' && session?.user) {
+        hasResolvedSession = true;
+        setLoading(false);
+      }
+    });
 
     const ensureSession = async () => {
       try {
-        const {
-          data: { user },
-          error: userError,
-        } = await supabase.auth.getUser();
+        const retryDelays = [0, 150, 300, 600];
 
-        if (userError) {
-          if (isMounted) {
-            setErrorMsg('Nao foi possivel validar sua sessao de recuperacao.');
+        for (const delay of retryDelays) {
+          if (delay > 0) {
+            await wait(delay);
           }
-          router.replace('/login');
-          return;
+
+          const {
+            data: { user },
+            error: userError,
+          } = await supabase.auth.getUser();
+
+          if (!isMounted || hasResolvedSession) {
+            return;
+          }
+
+          if (user) {
+            hasResolvedSession = true;
+            setLoading(false);
+            return;
+          }
+
+          if (userError) {
+            console.warn('[RESET_PASSWORD] Falha temporaria validando sessao:', userError.message);
+          }
         }
 
-        if (!user) {
-          router.replace('/login');
+        if (isMounted && !hasResolvedSession) {
+          setErrorMsg('Sessao de recuperacao nao encontrada. Solicite um novo link.');
+          router.replace('/login?error=reset_session_not_found');
           return;
         }
       } catch {
@@ -44,7 +78,7 @@ export default function ResetPasswordPage() {
         }
         router.replace('/login');
       } finally {
-        if (isMounted) {
+        if (isMounted && !hasResolvedSession) {
           setLoading(false);
         }
       }
@@ -54,8 +88,9 @@ export default function ResetPasswordPage() {
 
     return () => {
       isMounted = false;
+      subscription.unsubscribe();
     };
-  }, [router]);
+  }, [router, supabase]);
 
   const handleResetPassword = async (e: React.FormEvent) => {
     e.preventDefault();

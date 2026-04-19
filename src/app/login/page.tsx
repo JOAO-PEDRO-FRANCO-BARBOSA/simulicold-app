@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, Suspense } from 'react';
+import { useMemo, useState, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Mail, Lock, ArrowRight, UserPlus, AlertCircle, RefreshCw, Eye, EyeOff, Loader2 } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
@@ -9,10 +9,31 @@ const DEV_BYPASS_EMAIL = 'francojoao512@gmail.com';
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 const STRONG_PASSWORD_REGEX = /^(?=.*[A-Za-z])(?=.*\d).{8,}$/;
 
+function mapAuthCallbackError(errorParam: string | null): string {
+  if (!errorParam) {
+    return '';
+  }
+
+  if (errorParam === 'Nenhum_codigo_fornecido') {
+    return 'Link de recuperacao invalido. Solicite um novo e-mail.';
+  }
+
+  const normalized = errorParam.toLowerCase();
+  if (normalized.includes('pkce') || normalized.includes('code verifier')) {
+    return 'Nao foi possivel validar o link de recuperacao. Solicite um novo e-mail e tente novamente.';
+  }
+
+  if (normalized.includes('expired') || normalized.includes('invalid')) {
+    return 'Este link de recuperacao expirou ou ja foi utilizado.';
+  }
+
+  return errorParam;
+}
+
 function AuthContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const supabase = createClient();
+  const supabase = useMemo(() => createClient(), []);
   
   const [isLogin, setIsLogin] = useState(() => {
     return !searchParams.has('register');
@@ -25,7 +46,7 @@ function AuthContent() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
-  const [errorMsg, setErrorMsg] = useState('');
+  const [errorMsg, setErrorMsg] = useState(() => mapAuthCallbackError(searchParams.get('error')));
   const [successMsg, setSuccessMsg] = useState('');
   const [loginEmailError, setLoginEmailError] = useState('');
   const [loginPasswordError, setLoginPasswordError] = useState('');
