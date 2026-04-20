@@ -13,6 +13,19 @@ export async function GET(request: Request) {
       ? next
       : '/login?verified=true';
 
+  // Recovery links can arrive with PKCE verifier only available in browser storage.
+  // In this case, forward parameters to the reset page and let client exchange the code.
+  if (safeNext === '/reset-password') {
+    const resetUrl = new URL(safeNext, origin);
+    for (const [key, value] of searchParams.entries()) {
+      if (key === 'next') {
+        continue;
+      }
+      resetUrl.searchParams.append(key, value);
+    }
+    return NextResponse.redirect(resetUrl);
+  }
+
   if (code) {
     const cookieStore = await cookies();
     const supabase = createServerClient(
