@@ -1,109 +1,20 @@
 'use client';
 
-import { Suspense, useEffect, useMemo, useState } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useMemo, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { Lock, Eye, EyeOff, Loader2, ArrowRight, AlertCircle } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 
-function ResetPasswordForm() {
+export default function ResetPasswordPage() {
   const router = useRouter();
-  const searchParams = useSearchParams();
   const supabase = useMemo(() => createClient(), []);
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
-
-  useEffect(() => {
-    let isMounted = true;
-    let hasResolvedSession = false;
-
-    const wait = (ms: number) =>
-      new Promise<void>((resolve) => {
-        setTimeout(resolve, ms);
-      });
-
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((event, session) => {
-      if (!isMounted || hasResolvedSession) {
-        return;
-      }
-
-      if (event === 'SIGNED_IN' && session?.user) {
-        hasResolvedSession = true;
-        setLoading(false);
-      }
-    });
-
-    const ensureSession = async () => {
-      try {
-        const code = searchParams.get('code');
-        if (code) {
-          const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
-          if (exchangeError) {
-            if (isMounted) {
-              setErrorMsg('Nao foi possivel validar o link de recuperacao. Solicite um novo e-mail.');
-            }
-            router.replace(`/login?error=${encodeURIComponent(exchangeError.message)}`);
-            return;
-          }
-        }
-
-        const retryDelays = [0, 150, 300, 600];
-
-        for (const delay of retryDelays) {
-          if (delay > 0) {
-            await wait(delay);
-          }
-
-          const {
-            data: { user },
-            error: userError,
-          } = await supabase.auth.getUser();
-
-          if (!isMounted || hasResolvedSession) {
-            return;
-          }
-
-          if (user) {
-            hasResolvedSession = true;
-            setLoading(false);
-            return;
-          }
-
-          if (userError) {
-            console.warn('[RESET_PASSWORD] Falha temporaria validando sessao:', userError.message);
-          }
-        }
-
-        if (isMounted && !hasResolvedSession) {
-          setErrorMsg('Sessao de recuperacao nao encontrada. Solicite um novo link.');
-          router.replace('/login?error=reset_session_not_found');
-          return;
-        }
-      } catch {
-        if (isMounted) {
-          setErrorMsg('Erro ao processar o link de recuperacao.');
-        }
-        router.replace('/login');
-      } finally {
-        if (isMounted && !hasResolvedSession) {
-          setLoading(false);
-        }
-      }
-    };
-
-    void ensureSession();
-
-    return () => {
-      isMounted = false;
-      subscription.unsubscribe();
-    };
-  }, [router, searchParams, supabase]);
 
   const handleResetPassword = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -227,13 +138,5 @@ function ResetPasswordForm() {
         </div>
       </div>
     </div>
-  );
-}
-
-export default function ResetPasswordPage() {
-  return (
-    <Suspense fallback={<div className="flex min-h-screen items-center justify-center">Carregando validação de segurança...</div>}>
-      <ResetPasswordForm />
-    </Suspense>
   );
 }
