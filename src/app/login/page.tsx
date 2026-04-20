@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState, Suspense } from 'react';
+import { useState, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Mail, Lock, ArrowRight, UserPlus, AlertCircle, RefreshCw, Eye, EyeOff, Loader2 } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
@@ -37,7 +37,7 @@ function mapAuthCallbackError(errorParam: string | null): string {
 function AuthContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const supabase = useMemo(() => createClient(), []);
+  const supabase = createClient();
   
   const [isLogin, setIsLogin] = useState(() => {
     return !searchParams.has('register');
@@ -344,10 +344,9 @@ function AuthContent() {
     setLoading(true);
 
     try {
-      const redirectTo = `${window.location.origin}/auth/callback?next=/reset-password`;
       const { error } = await supabase.auth.resetPasswordForEmail(
         email.trim().toLowerCase(),
-        { redirectTo }
+        { redirectTo: `${window.location.origin}/auth/callback?next=/reset-password` }
       );
 
       if (error) {
