@@ -1,6 +1,7 @@
 import { createServerClient } from '@supabase/ssr';
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
+import { SimulationsUpsellModal } from '@/components/SimulationsUpsellModal';
 
 const DEV_BYPASS_EMAIL = 'francojoao512@gmail.com';
 
@@ -34,35 +35,23 @@ export default async function ProtectedLayout({
     redirect('/login');
   }
 
-  if (user.email?.toLowerCase() !== DEV_BYPASS_EMAIL) {
-    const { data: subscription } = await supabase
-      .from('subscriptions')
-      .select('status, current_period_end')
-      .eq('user_id', user.id)
-      .maybeSingle();
-
-    const isAuthorized =
-      subscription?.status === 'authorized' || subscription?.status === 'active';
-    let isValidPeriod = false;
-
-    if (subscription?.current_period_end) {
-      isValidPeriod = new Date(subscription.current_period_end) > new Date();
-    }
-
-    if (!subscription || !isAuthorized || !isValidPeriod) {
-      redirect('/checkout');
-    }
-  }
-
   const { data: simulations } = await supabase
     .from('user_credits')
     .select('balance')
     .eq('user_id', user.id)
     .maybeSingle();
 
-  if ((simulations?.balance ?? 0) <= 0) {
-    redirect('/checkout-addon');
-  }
+  const hasCredits = (simulations?.balance ?? 0) > 0 || user.email?.toLowerCase() === DEV_BYPASS_EMAIL;
 
-  return <>{children}</>;
+  return (
+    <>
+      {children}
+      {!hasCredits && (
+        <SimulationsUpsellModal
+          isOpen
+          message="Você está sem créditos. Compre um novo pacote para continuar usando a plataforma."
+        />
+      )}
+    </>
+  );
 }

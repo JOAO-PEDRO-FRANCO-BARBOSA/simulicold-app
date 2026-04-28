@@ -12,7 +12,6 @@ interface Props {
 export function CallPanelIdle({ onStart, onUpsellRequired, hasPersona, simulations }: Props) {
   const areSimulationsReady = simulations !== null;
   const isSimulationBlocked = areSimulationsReady && simulations <= 0;
-  const isBlocked = !hasPersona || !areSimulationsReady || isSimulationBlocked;
 
   const handleStartClick = () => {
     if (!hasPersona) {
@@ -52,13 +51,8 @@ export function CallPanelIdle({ onStart, onUpsellRequired, hasPersona, simulatio
 
           <button 
             onClick={handleStartClick}
-            aria-disabled={isBlocked}
             title={!hasPersona ? 'Selecione um perfil de cliente antes de iniciar' : !areSimulationsReady ? 'Carregando simulações...' : isSimulationBlocked ? 'Limite atingido' : undefined}
-            className={`flex items-center gap-3 bg-primary text-white px-10 py-4 rounded-full font-bold text-lg transition-transform shadow-[0_0_30px_rgba(219,39,119,0.25)] tracking-wide ${
-              isBlocked 
-                ? 'opacity-40 cursor-not-allowed' 
-                : 'hover:bg-primary-hover hover:scale-105 active:scale-95 cursor-pointer'
-            }`}
+            className="flex items-center gap-3 bg-primary text-white px-10 py-4 rounded-full font-bold text-lg transition-transform shadow-[0_0_30px_rgba(219,39,119,0.25)] tracking-wide hover:bg-primary-hover hover:scale-105 active:scale-95 cursor-pointer"
           >
             <Phone className="w-6 h-6 fill-current" />
             <span>Iniciar Chamada</span>

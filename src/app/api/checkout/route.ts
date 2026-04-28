@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createSupabaseServerClient, getAuthorizationToken } from '@/lib/supabase-server';
-import { preferenceClient, PLANS, PlanType } from '@/lib/mercadopago';
-import { PLAN_TYPES } from '@/lib/pricing';
+import { preferenceClient } from '@/lib/mercadopago';
 
 function normalizeSiteUrl(raw: string | undefined): string {
   const fallback = 'http://localhost:3000';
@@ -76,60 +75,66 @@ export async function POST(request: NextRequest) {
 
     if (cookieAuthError || !checkoutUser) {
       return NextResponse.json(
-        { error: 'Não autenticado. Faça login para assinar.' },
+        { error: 'Não autenticado. Faça login para comprar créditos.' },
         { status: 401 }
       );
     }
 
-    // 3. Extrair e validar o plano do body
+    // 3. Extrair e validar o pacote (payload vindo do frontend)
     const body = await request.json();
-    const planType = body.planType as PlanType;
+    const title = typeof body.title === 'string' ? body.title.trim() : '';
+    const unit_price = typeof body.unit_price === 'number' ? body.unit_price : Number(body.unit_price);
+    const packageName = typeof body.package === 'string' ? body.package.trim() : '';
+    const credits = typeof body.credits === 'number' ? body.credits : Number(body.credits);
 
-    if (!planType || !PLAN_TYPES.includes(planType)) {
-      return NextResponse.json(
-        { error: 'Plano inválido. Use: mensal, trimestral ou semestral.' },
-        { status: 400 }
-      );
+    if (!title) {
+      return NextResponse.json({ error: 'Campo "title" é obrigatório.' }, { status: 400 });
     }
 
-    const plan = PLANS[planType];
+    if (!unit_price || Number.isNaN(unit_price) || unit_price <= 0) {
+      return NextResponse.json({ error: 'Campo "unit_price" inválido.' }, { status: 400 });
+    }
+
+    if (!credits || Number.isNaN(credits) || credits <= 0) {
+      return NextResponse.json({ error: 'Campo "credits" inválido.' }, { status: 400 });
+    }
+
     const siteUrl = normalizeSiteUrl(process.env.NEXT_PUBLIC_SITE_URL);
 
     if (!checkoutUser.email) {
-      return NextResponse.json(
-        { error: 'Conta sem e-mail válido para gerar cobrança no Mercado Pago.' },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: 'Conta sem e-mail válido para gerar cobrança no Mercado Pago.' }, { status: 400 });
     }
 
+    // Monta payload da Preference para pagamento único (Package)
+    const externalReference = JSON.stringify({ userId: checkoutUser.id, package: packageName || title, credits });
+
+    // Criar preferência para Checkout Pro (pagamento único de pacote de créditos)
     const preference = await preferenceClient.create({
       body: {
         items: [
           {
-            id: planType,
-            title: plan.label,
-            description: plan.description,
+            title,
             quantity: 1,
             currency_id: 'BRL',
-            unit_price: plan.price,
+            unit_price,
           },
         ],
         payer: {
           email: checkoutUser.email,
         },
-        external_reference: checkoutUser.id,
+        external_reference: externalReference,
+        metadata: {
+          userId: checkoutUser.id,
+          package: packageName || title,
+          credits,
+          flow: 'one_time_package',
+        },
         back_urls: {
           success: `${siteUrl}/dashboard`,
           pending: `${siteUrl}/dashboard`,
           failure: `${siteUrl}/dashboard`,
         },
         auto_return: 'approved',
-        metadata: {
-          flow: 'time_package',
-          planType,
-          simulations: plan.monthlySimulations,
-          durationDays: plan.frequency * 30,
-        },
         notification_url: `${siteUrl}/api/webhooks/mercadopago`,
       },
     });
@@ -138,10 +143,7 @@ export async function POST(request: NextRequest) {
       throw new Error('Mercado Pago não retornou um link de pagamento.');
     }
 
-    return NextResponse.json({
-      init_point: preference.init_point,
-      url: preference.init_point,
-    });
+    return NextResponse.json({ init_point: preference.init_point, url: preference.init_point });
   } catch (error: unknown) {
     console.error('[CHECKOUT] Erro ao criar Preference:', error);
     const extracted = extractCheckoutError(error);

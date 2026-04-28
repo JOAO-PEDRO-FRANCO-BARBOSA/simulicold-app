@@ -239,6 +239,7 @@ function AuthContent() {
     setLoading(true);
 
     const redirectUrl = new URL(`${window.location.origin}/auth/callback`);
+    redirectUrl.searchParams.set('next', '/checkout');
 
     const normalizedEmail = email.trim().toLowerCase();
 
@@ -289,7 +290,8 @@ function AuthContent() {
       }
 
       setEmail(normalizedEmail);
-      setRegistrationSuccess(true);
+      router.push('/checkout');
+      return;
     } catch (error) {
       console.error('[REGISTER] Excecao inesperada no cadastro:', error);
       setErrorMsg(

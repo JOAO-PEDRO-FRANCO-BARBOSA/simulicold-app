@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { Mic, FileText, Users, History } from 'lucide-react';
 import Image from 'next/image';
-import { formatCurrencyBRL, PLAN_PRICING } from '@/lib/pricing';
+import PricingSection from '@/components/PricingSection';
 
 export default function LandingPage() {
   return (
@@ -156,70 +156,8 @@ export default function LandingPage() {
           </div>
         </section>
 
-        {/* Pricing Section */}
-        <section id="preco" className="py-24 px-6 w-full max-w-6xl mx-auto border-t border-white/5">
-          <div className="text-center mb-16">
-            <h2 className="text-3xl md:text-4xl font-bold mb-4 text-white">
-              Acesso Total. Preço Único,<br/>Pagamento Flexível.
-            </h2>
-          </div>
-
-          <div className="grid md:grid-cols-3 gap-6 max-w-5xl mx-auto items-stretch">
-            {/* Semestral */}
-            <div className="bg-[#0f1523] border border-blue-900/30 rounded-2xl p-8 flex flex-col text-center hover:border-blue-700/50 transition-colors">
-              <div className="w-12 h-12 bg-blue-900/20 rounded-full flex items-center justify-center mx-auto mb-6 text-blue-400">
-                <FileText className="w-5 h-5" />
-              </div>
-              <h3 className="text-xl font-bold text-white mb-2">Semestral</h3>
-              <div className="text-blue-400 font-semibold mb-6">({formatCurrencyBRL(PLAN_PRICING.semestral.price)})</div>
-              <p className="text-slate-400 text-sm mb-8 flex-1">
-                Acesso completo por 6 meses. Ideal para equipes escalando suas operações com máxima eficiência no pagamento a termo.
-              </p>
-              <Link 
-                href="/login?register=true"
-                className="w-full py-3 bg-blue-600 hover:bg-blue-500 text-white font-medium rounded-lg transition-colors"
-              >
-                Assinar Semestre
-              </Link>
-            </div>
-
-            {/* Trimestral */}
-            <div className="bg-[#131b2c] border border-blue-600/50 rounded-2xl p-8 flex flex-col text-center relative shadow-[0_0_30px_rgba(37,99,235,0.1)]">
-              <div className="w-12 h-12 bg-blue-900/40 rounded-full flex items-center justify-center mx-auto mb-6 text-blue-400">
-                <FileText className="w-5 h-5" />
-              </div>
-              <h3 className="text-xl font-bold text-white mb-2">Trimestral</h3>
-              <div className="text-blue-400 font-semibold mb-6">({formatCurrencyBRL(PLAN_PRICING.trimestral.price)})</div>
-              <p className="text-slate-400 text-sm mb-8 flex-1">
-                Acesso total por 3 meses. Compromisso balanceado garantindo evolução contínua.
-              </p>
-              <Link 
-                href="/login?register=true"
-                className="w-full py-3 bg-blue-600 hover:bg-blue-500 text-white font-medium rounded-lg transition-colors"
-              >
-                Assinar Trimestre
-              </Link>
-            </div>
-
-            {/* Mensal */}
-            <div className="bg-[#0f1523] border border-blue-900/30 rounded-2xl p-8 flex flex-col text-center hover:border-blue-700/50 transition-colors">
-              <div className="w-12 h-12 bg-blue-900/20 rounded-full flex items-center justify-center mx-auto mb-6 text-blue-400">
-                <FileText className="w-5 h-5" />
-              </div>
-              <h3 className="text-xl font-bold text-white mb-2">Mensal</h3>
-              <div className="text-blue-400 font-semibold mb-6">({formatCurrencyBRL(PLAN_PRICING.mensal.price)})</div>
-              <p className="text-slate-400 text-sm mb-8 flex-1">
-                Renovação mensal garantindo flexibilidade para quem quer testar e provar o valor.
-              </p>
-              <Link 
-                href="/login?register=true"
-                className="w-full py-3 bg-blue-600 hover:bg-blue-500 text-white font-medium rounded-lg transition-colors"
-              >
-                Assinar Mês
-              </Link>
-            </div>
-          </div>
-        </section>
+        {/* Pricing Section (Packages) */}
+        <PricingSection />
       </main>
 
       {/* Footer */}
