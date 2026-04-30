@@ -17,6 +17,8 @@ export default function Dashboard() {
   const [sessionId, setSessionId] = useState<string | null>(null);
   
   const [selectedPersonaId, setSelectedPersonaId] = useState('');
+  const [activePersonaId, setActivePersonaId] = useState('');
+  const [personas, setPersonas] = useState<any[]>([]);
   const [selectedDifficulty, setSelectedDifficulty] = useState('medio');
   
   // Guardamos a sessão do Usuário logado
@@ -31,6 +33,25 @@ export default function Dashboard() {
   const handleUpsellRequired = (message: string) => {
     setUpsellMessage(message);
     setUpsellModalOpen(true);
+  };
+
+  const handleStartCall = () => {
+    if (!selectedPersonaId) {
+      return;
+    }
+
+    const personaToUse = selectedPersonaId === 'random-mode'
+      ? personas[Math.floor(Math.random() * personas.length)]
+      : personas.find((persona) => persona.id === selectedPersonaId);
+
+    if (!personaToUse) {
+      return;
+    }
+
+    setActivePersonaId(personaToUse.id);
+    setSessionId(crypto.randomUUID());
+    setMessages([]);
+    setCallState('active');
   };
 
   useEffect(() => {
@@ -61,6 +82,7 @@ export default function Dashboard() {
               <ConfigPanel 
                 onPersonaSelect={setSelectedPersonaId}
                 onDifficultySelect={setSelectedDifficulty}
+                onPersonasLoaded={setPersonas}
               />
             ) : (
               <ActiveVoicePanel 
@@ -69,7 +91,7 @@ export default function Dashboard() {
                   setCallState('ended');
                 }}
                 onUpsellRequired={handleUpsellRequired}
-                personaId={selectedPersonaId}
+                personaId={activePersonaId}
                 difficulty={selectedDifficulty}
                 userId={userId}
                 sessionId={sessionId}
@@ -83,13 +105,9 @@ export default function Dashboard() {
             {callState === 'idle' ? (
               <CallPanelIdle 
                 simulations={credits}
-                hasPersona={Boolean(selectedPersonaId)}
+                hasPersona={Boolean(selectedPersonaId) && (selectedPersonaId !== 'random-mode' || personas.length > 0)}
                 onUpsellRequired={handleUpsellRequired}
-                onStart={() => {
-                  setSessionId(crypto.randomUUID());
-                  setMessages([]); // Reset messages on new call
-                  setCallState('active');
-                }} 
+                onStart={handleStartCall} 
               />
             ) : (
                <TranscriptionPanel messages={messages} />

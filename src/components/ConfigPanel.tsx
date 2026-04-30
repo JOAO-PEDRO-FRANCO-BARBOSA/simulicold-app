@@ -3,9 +3,11 @@
 import { useState, useEffect } from 'react';
 import {
   Briefcase, Building, Users, UserX, Crown, Settings, LucideIcon,
-  TrendingUp, DollarSign, Shield, Target, Zap, User
+  TrendingUp, DollarSign, Shield, Target, Zap, User, Shuffle, Stethoscope
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
+
+const RANDOM_MODE_ID = 'random-mode';
 
 // Map de ícones string-to-component — expandido para mais opções
 const ICON_MAP: Record<string, LucideIcon> = {
@@ -16,10 +18,13 @@ const ICON_MAP: Record<string, LucideIcon> = {
   Briefcase,
   'trending-up': TrendingUp,
   'dollar-sign': DollarSign,
+  'stethoscope': Stethoscope,
+  'briefcase': Briefcase,
   Shield,
   Target,
   Zap,
   User,
+  Stethoscope,
 };
 
 const DIFFICULTIES = [
@@ -31,9 +36,10 @@ const DIFFICULTIES = [
 interface ConfigPanelProps {
   onPersonaSelect: (id: string) => void;
   onDifficultySelect: (diff: string) => void;
+  onPersonasLoaded: (personas: any[]) => void;
 }
 
-export function ConfigPanel({ onPersonaSelect, onDifficultySelect }: ConfigPanelProps) {
+export function ConfigPanel({ onPersonaSelect, onDifficultySelect, onPersonasLoaded }: ConfigPanelProps) {
   const [personas, setPersonas] = useState<any[]>([]);
   const [selectedScenario, setSelectedScenario] = useState('');
   const [selectedDifficulty, setSelectedDifficulty] = useState('medio');
@@ -68,6 +74,7 @@ export function ConfigPanel({ onPersonaSelect, onDifficultySelect }: ConfigPanel
         console.error('Erro ao buscar personas:', error);
       } else if (data && data.length > 0) {
         setPersonas(data);
+        onPersonasLoaded(data);
         const defaultId = data[0].id;
         setSelectedScenario(defaultId);
         onPersonaSelect(defaultId);
@@ -156,6 +163,29 @@ export function ConfigPanel({ onPersonaSelect, onDifficultySelect }: ConfigPanel
           </div>
         ) : (
           <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+            <button
+              onClick={() => handlePersonaClick(RANDOM_MODE_ID)}
+              className={`relative flex flex-col items-center justify-center p-4 rounded-xl border transition-all gap-1 ${
+                selectedScenario === RANDOM_MODE_ID
+                  ? 'border-primary bg-primary/5 text-primary shadow-inner shadow-primary/10'
+                  : 'border-border bg-background hover:border-foreground/30 text-foreground/70'
+              }`}
+            >
+              <div className={`w-10 h-10 rounded-full flex items-center justify-center mb-1 ${
+                selectedScenario === RANDOM_MODE_ID
+                  ? 'bg-primary/15 border border-primary/30'
+                  : 'bg-foreground/5 border border-border'
+              }`}>
+                <Shuffle className={`w-5 h-5 ${selectedScenario === RANDOM_MODE_ID ? 'text-primary' : 'text-foreground/50'}`} />
+              </div>
+              <span className="text-xs font-bold text-center leading-tight">Modo Aleatório</span>
+              <span className={`text-[9px] text-center leading-tight mt-0.5 line-clamp-2 ${
+                selectedScenario === RANDOM_MODE_ID ? 'text-primary/60' : 'text-foreground/35'
+              }`}>
+                Seleciona uma persona real ao iniciar
+              </span>
+            </button>
+
             {personas.map((persona) => {
               const Icon = ICON_MAP[persona.icon_name] || UserX; // Fallback Icon
               const isActive = selectedScenario === persona.id;
