@@ -113,6 +113,7 @@ export async function POST(request: NextRequest) {
       body: {
         items: [
           {
+            id: packageName || title || 'pacote-simulicold',
             title,
             quantity: 1,
             currency_id: 'BRL',
