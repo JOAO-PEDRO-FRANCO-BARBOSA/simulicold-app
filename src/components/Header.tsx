@@ -19,14 +19,13 @@ export function Header({ onExitSimulator }: HeaderProps) {
     async function loadData() {
       const { data: authData } = await supabase.auth.getUser();
       if (authData?.user) {
+        const authAvatarUrl = (authData.user.user_metadata?.avatar_url as string | undefined) ?? null;
         const { data: profileRow } = await supabase
           .from('profiles')
           .select('avatar_url')
           .eq('id', authData.user.id)
           .single();
-        if (profileRow?.avatar_url) {
-          setAvatarUrl(profileRow.avatar_url);
-        }
+        setAvatarUrl(profileRow?.avatar_url || authAvatarUrl);
       }
     }
     loadData();
@@ -72,11 +71,13 @@ export function Header({ onExitSimulator }: HeaderProps) {
             onClick={() => setIsMenuOpen(!isMenuOpen)}
             className="hover:text-foreground transition-colors p-1 cursor-pointer rounded-full border border-transparent hover:border-border"
           >
-            {avatarUrl ? (
-              <img src={avatarUrl} alt="Avatar" className="w-6 h-6 rounded-full object-cover" />
-            ) : (
-              <User className="w-5 h-5 text-foreground/80" />
-            )}
+            <span className="flex h-9 w-9 items-center justify-center rounded-full overflow-hidden border border-border bg-foreground/5 text-foreground/70">
+              {avatarUrl ? (
+                <img src={avatarUrl} alt="Avatar do usuário" className="h-full w-full object-cover" />
+              ) : (
+                <User className="w-4 h-4" />
+              )}
+            </span>
           </button>
 
           {isMenuOpen && (

@@ -3,16 +3,21 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { Header } from '@/components/Header';
-import { User, Mail, ChevronLeft, CreditCard, Shield, Award, Loader2 } from 'lucide-react';
+import { User, Mail, ChevronLeft, Award, Loader2, CheckCircle2, AlertTriangle } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 
 export default function ProfilePage() {
-  const [profile, setProfile] = useState<{ fullName: string, email: string, subStatus: string, avatarUrl: string } | null>(null);
+  const [profile, setProfile] = useState<{ fullName: string; email: string; avatarUrl: string } | null>(null);
   const [avatarFile, setAvatarFile] = useState<File | null>(null);
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [successMsg, setSuccessMsg] = useState("");
+  const [errorMsg, setErrorMsg] = useState("");
   const [loading, setLoading] = useState(true);
+  const [stats, setStats] = useState<{ simulationsCount: number; averageScore: number | null }>({
+    simulationsCount: 0,
+    averageScore: null,
+  });
 
   useEffect(() => {
     async function loadData() {
@@ -20,26 +25,46 @@ export default function ProfilePage() {
       const { data: authData } = await supabase.auth.getUser();
       
       if (authData?.user) {
-        // 2. Com o user.id, puxar os metadados e os campos da tabela public.profiles
-        const { data: profileRow, error } = await supabase
-          .from('profiles')
-          .select('full_name, subscription_status, avatar_url')
-          .eq('id', authData.user.id)
-          .single();
+        const authAvatarUrl = (authData.user.user_metadata?.avatar_url as string | undefined) || '';
+        const authFullName = (authData.user.user_metadata?.full_name as string | undefined) || '';
+
+        const [profileResult, simulationsResult] = await Promise.all([
+          supabase
+            .from('profiles')
+            .select('full_name, avatar_url')
+            .eq('id', authData.user.id)
+            .single(),
+          supabase
+            .from('simulations')
+            .select('overall_score', { count: 'exact' })
+            .eq('user_id', authData.user.id),
+        ]);
+
+        const { data: profileRow, error } = profileResult;
 
         if (error) {
           console.error('Erro ao carregar perfil:', error);
         }
 
+        const simulationRows = simulationsResult.data ?? [];
+        const scoredRows = simulationRows
+          .map((row: any) => Number(row?.overall_score))
+          .filter((score: number) => Number.isFinite(score));
+
+        const simulationsCount = simulationsResult.count ?? simulationRows.length;
+        const averageScore = scoredRows.length > 0
+          ? scoredRows.reduce((total: number, score: number) => total + score, 0) / scoredRows.length
+          : null;
+
+        setStats({ simulationsCount, averageScore });
+
+        // 2. Com o user.id, puxar os metadados e os campos da tabela public.profiles
         setProfile({
           email: authData.user.email || 'Não encontrado',
-          fullName: profileRow?.full_name || 'Vendedor Autenticado',
-          subStatus: profileRow?.subscription_status === 'pro' ? 'PRO' : 'FREE',
-          avatarUrl: profileRow?.avatar_url || ''
+          fullName: profileRow?.full_name || authFullName || 'Vendedor Autenticado',
+          avatarUrl: profileRow?.avatar_url || authAvatarUrl
         });
-        if (profileRow?.avatar_url) {
-          setAvatarPreview(profileRow.avatar_url);
-        }
+        setAvatarPreview(profileRow?.avatar_url || authAvatarUrl || null);
       }
       setLoading(false);
     }
@@ -51,47 +76,68 @@ export default function ProfilePage() {
     if (!profile) return;
     setSaving(true);
     setSuccessMsg("");
+    setErrorMsg("");
 
-    const { data: authData } = await supabase.auth.getUser();
-    if (!authData?.user) {
-      setSaving(false);
-      return;
-    }
+    try {
+      const { data: authData, error: authError } = await supabase.auth.getUser();
+      if (authError || !authData?.user) {
+        console.error('Erro ao identificar usuário autenticado:', authError?.message || 'Usuário ausente');
+        setErrorMsg('Você precisa estar autenticado para salvar.');
+        return;
+      }
 
-    let updatedAvatarUrl = profile.avatarUrl;
+      const user = authData.user;
 
-    if (avatarFile) {
-      const filePath = `${authData.user.id}/avatar.png`;
-      const { error: uploadError } = await supabase.storage
-        .from('avatars')
-        .upload(filePath, avatarFile, { upsert: true });
-        
-      if (!uploadError) {
+      let updatedAvatarUrl = profile.avatarUrl;
+
+      if (avatarFile) {
+        const filePath = `${user.id}/avatar.png`;
+        const { error: uploadError } = await supabase.storage
+          .from('avatars')
+          .upload(filePath, avatarFile, { upsert: true, contentType: avatarFile.type });
+
+        if (uploadError) {
+          console.error('Erro ao enviar avatar:', uploadError.message);
+          setErrorMsg(uploadError.message || 'Falha ao enviar a nova foto. Tente novamente.');
+          return;
+        }
+
         const { data: publicUrlData } = supabase.storage
           .from('avatars')
           .getPublicUrl(filePath);
-        
-        updatedAvatarUrl = publicUrlData.publicUrl + '?t=' + Date.now(); // Cache busting para atualizar imagem via mesma url
+
+        updatedAvatarUrl = publicUrlData.publicUrl + '?t=' + Date.now();
       }
-    }
 
-    const { error: updateError } = await supabase
-      .from('profiles')
-      .upsert({
-        id: authData.user.id,
-        full_name: profile.fullName,
-        avatar_url: updatedAvatarUrl,
-      }, {
-        onConflict: 'id',
-      });
+      const nextFullName = profile.fullName.trim();
 
-    if (!updateError) {
+      const { error: profileUpdateError } = await supabase
+        .from('profiles')
+        .update({
+          full_name: nextFullName,
+          avatar_url: updatedAvatarUrl || null,
+        })
+        .eq('id', user.id);
+
+      if (profileUpdateError) {
+        console.error('Erro ao salvar perfil:', profileUpdateError.message);
+        setErrorMsg(profileUpdateError.message || 'Não foi possível salvar as alterações.');
+        return;
+      }
+
+      setProfile(prev => prev ? { ...prev, fullName: nextFullName, avatarUrl: updatedAvatarUrl || '' } : prev);
+      setAvatarPreview(updatedAvatarUrl || null);
+      setAvatarFile(null);
+      window.dispatchEvent(new CustomEvent('profileUpdated', { detail: { avatar_url: updatedAvatarUrl || '' } }));
       setSuccessMsg("Perfil salvo com sucesso!");
-      window.dispatchEvent(new CustomEvent('profileUpdated', { detail: { avatar_url: updatedAvatarUrl } }));
       setTimeout(() => setSuccessMsg(""), 3000);
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.error('Erro inesperado ao salvar perfil:', message);
+      setErrorMsg(message || 'Falha inesperada ao salvar o perfil.');
+    } finally {
+      setSaving(false);
     }
-    
-    setSaving(false);
   };
 
   return (
@@ -151,7 +197,7 @@ export default function ProfilePage() {
                    <Mail className="w-4 h-4" /> {profile?.email}
                 </p>
                 <div className="mt-4 w-full flex justify-center md:justify-start">
-                   <div className="flex items-center gap-4">
+                   <div className="flex flex-col items-center md:items-start gap-3">
                      <button 
                        onClick={handleSave} 
                        disabled={saving}
@@ -161,27 +207,35 @@ export default function ProfilePage() {
                        {saving && <Loader2 className="w-4 h-4 animate-spin" />}
                        {saving ? 'Salvando...' : 'Salvar Alterações'}
                      </button>
-                     {successMsg && <span className="text-green-500 text-sm font-medium animate-in fade-in">{successMsg}</span>}
+                     <div className="flex items-center gap-3 flex-wrap justify-center md:justify-start">
+                       {successMsg && (
+                         <span className="text-green-500 text-sm font-medium animate-in fade-in flex items-center gap-1.5">
+                           <CheckCircle2 className="w-4 h-4" />
+                           {successMsg}
+                         </span>
+                       )}
+                       {errorMsg && (
+                         <span className="text-red-500 text-sm font-medium animate-in fade-in flex items-center gap-1.5">
+                           <AlertTriangle className="w-4 h-4" />
+                           {errorMsg}
+                         </span>
+                       )}
+                     </div>
                    </div>
                 </div>
                 
-                <div className="mt-8 grid grid-cols-1 sm:grid-cols-3 gap-4 w-full relative z-10">
+                <div className="mt-8 grid grid-cols-1 sm:grid-cols-2 gap-4 w-full relative z-10">
                   <div className="bg-background border border-border rounded-xl p-4 flex flex-col items-center justify-center gap-1">
                     <Award className="w-5 h-5 text-accent mb-1" />
                     <span className="text-xs font-bold text-foreground/50 uppercase tracking-widest">Simulações</span>
-                    <span className="text-xl font-black">-</span>
+                    <span className="text-xl font-black">{stats.simulationsCount}</span>
                   </div>
                   <div className="bg-background border border-border rounded-xl p-4 flex flex-col items-center justify-center gap-1">
-                    <Shield className="w-5 h-5 text-accent mb-1" />
-                    <span className="text-xs font-bold text-foreground/50 uppercase tracking-widest">Plano</span>
-                    <span className={`text-lg font-black ${profile?.subStatus === 'PRO' ? 'text-accent' : 'text-foreground'}`}>
-                      {profile?.subStatus}
+                    <Award className="w-5 h-5 text-accent mb-1" />
+                    <span className="text-xs font-bold text-foreground/50 uppercase tracking-widest">Score médio</span>
+                    <span className="text-xl font-black">
+                      {stats.averageScore === null ? '—' : stats.averageScore.toFixed(1)}
                     </span>
-                  </div>
-                  <div className="bg-background border border-border rounded-xl p-4 flex flex-col items-center justify-center gap-1 opacity-50 cursor-not-allowed">
-                    <CreditCard className="w-5 h-5 text-foreground mb-1" />
-                    <span className="text-xs font-bold text-foreground/50 uppercase tracking-widest">Faturamento</span>
-                    <span className="text-sm font-semibold">Em breve</span>
                   </div>
                 </div>
              </div>

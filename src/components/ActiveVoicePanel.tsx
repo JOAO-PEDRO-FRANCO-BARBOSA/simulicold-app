@@ -737,7 +737,10 @@ export function ActiveVoicePanel({ onEnd, onUpsellRequired, userId, sessionId, p
             // UPDATE na simulação com os dados de análise
             const { error: updateError } = await supabase
               .from('simulations')
-              .update({ analysis_data: analysisData })
+              .update({
+                analysis_data: analysisData,
+                overall_score: analysisData.overall_score,
+              })
               .eq('id', simulationId);
 
             if (updateError) {
