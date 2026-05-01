@@ -50,6 +50,7 @@ export default async function ProtectedLayout({
         <SimulationsUpsellModal
           isOpen
           message="Você está sem créditos. Compre um novo pacote para continuar usando a plataforma."
+          onClose={() => {}}
         />
       )}
     </>
