@@ -9,6 +9,7 @@ const PLANS: Array<{
   id: PlanType;
   name: string;
   price: number;
+  simulations?: number;
   description: string;
   featured?: boolean;
   icon: typeof Shield;
