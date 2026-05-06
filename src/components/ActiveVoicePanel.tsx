@@ -747,7 +747,7 @@ export function ActiveVoicePanel({ onEnd, onUpsellRequired, userId, sessionId, p
               const errorMessage = updateError instanceof Error
                 ? updateError.message
                 : (updateError && typeof updateError === 'object' && 'message' in updateError)
-                ? String(updateError.message)
+                ? String((updateError as Record<string, unknown>).message)
                 : JSON.stringify(updateError);
               console.error('⚠️ Erro ao salvar análise:', errorMessage);
             } else {
@@ -757,7 +757,7 @@ export function ActiveVoicePanel({ onEnd, onUpsellRequired, userId, sessionId, p
             const analyzeErrorMessage = analyzeErr instanceof Error
               ? analyzeErr.message
               : (analyzeErr && typeof analyzeErr === 'object' && 'message' in analyzeErr)
-              ? String(analyzeErr.message)
+              ? String((analyzeErr as Record<string, unknown>).message)
               : JSON.stringify(analyzeErr);
             console.error('⚠️ Erro na análise de vendas:', analyzeErrorMessage);
           }
