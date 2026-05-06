@@ -273,7 +273,15 @@ export async function POST(req: Request) {
 
     return Response.json(object);
   } catch (error: any) {
-    console.error('Erro na rota /api/analyze:', error);
-    return new Response(error.message || 'Erro interno na análise', { status: 500 });
+    const errorMessage = error instanceof Error
+      ? error.message
+      : (error && typeof error === 'object' && 'message' in error)
+      ? String(error.message)
+      : 'Erro interno desconhecido';
+    console.error('Erro na rota /api/analyze:', errorMessage, error);
+    return Response.json(
+      { error: errorMessage },
+      { status: 500 }
+    );
   }
 }

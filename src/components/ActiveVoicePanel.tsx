@@ -744,12 +744,22 @@ export function ActiveVoicePanel({ onEnd, onUpsellRequired, userId, sessionId, p
               .eq('id', simulationId);
 
             if (updateError) {
-              console.error('⚠️ Erro ao salvar análise:', updateError);
+              const errorMessage = updateError instanceof Error
+                ? updateError.message
+                : (updateError && typeof updateError === 'object' && 'message' in updateError)
+                ? String(updateError.message)
+                : JSON.stringify(updateError);
+              console.error('⚠️ Erro ao salvar análise:', errorMessage);
             } else {
               console.log('✅ Análise salva com sucesso no banco!');
             }
           } catch (analyzeErr) {
-            console.error('⚠️ Erro na análise de vendas:', analyzeErr);
+            const analyzeErrorMessage = analyzeErr instanceof Error
+              ? analyzeErr.message
+              : (analyzeErr && typeof analyzeErr === 'object' && 'message' in analyzeErr)
+              ? String(analyzeErr.message)
+              : JSON.stringify(analyzeErr);
+            console.error('⚠️ Erro na análise de vendas:', analyzeErrorMessage);
           }
         })();
       }
