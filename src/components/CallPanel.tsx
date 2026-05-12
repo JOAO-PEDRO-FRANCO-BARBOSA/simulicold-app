@@ -57,7 +57,20 @@ export function CallPanel() {
             <p className="text-foreground/60 mb-8">Clique no botão para simular a ligação</p>
 
             <button 
-              onClick={() => { initGlobalAudio(); setCallState('active'); }}
+              onClick={async () => {
+                try {
+                  // 1. Request microphone FIRST to force OS into PlayAndRecord mode
+                  await navigator.mediaDevices.getUserMedia({ audio: true });
+                  
+                  // 2. THEN initialize and unlock global AudioContext (now born in correct hardware state)
+                  initGlobalAudio();
+                  
+                  // 3. Render active panel
+                  setCallState('active');
+                } catch (err) {
+                  alert('Permita o acesso ao microfone para simular a chamada.');
+                }
+              }}
               className="flex items-center gap-3 bg-primary hover:bg-primary-hover text-white px-8 py-4 rounded-full font-bold text-lg transition-transform hover:scale-105 active:scale-95 shadow-[0_0_20px_rgba(219,39,119,0.3)] cursor-pointer"
             >
               <Phone className="w-6 h-6" />
