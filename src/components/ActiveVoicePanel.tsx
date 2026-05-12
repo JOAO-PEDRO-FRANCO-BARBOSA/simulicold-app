@@ -4,6 +4,50 @@ import { useState, useEffect, useRef } from 'react';
 import { Mic, PhoneOff, Loader2 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 
+// Global singleton AudioContext and initializer to be triggered synchronously
+export let globalAudioContext: AudioContext | null = null;
+export const initGlobalAudio = () => {
+  if (!globalAudioContext) {
+    const AudioCtx = (window as any).AudioContext || (window as any).webkitAudioContext;
+    try {
+      globalAudioContext = new AudioCtx();
+    } catch (e) {
+      console.warn('Não foi possível criar AudioContext global:', e);
+      globalAudioContext = null;
+      return null;
+    }
+  }
+
+  try {
+    const ctx = globalAudioContext;
+    if (ctx && ctx.state === 'suspended') {
+      // Not awaiting here so this runs synchronously inside click handler call stack
+      void ctx.resume();
+    }
+
+    // Play a tiny silent buffer to force unlock on iOS if needed
+    try {
+      if (ctx) {
+        const buffer = ctx.createBuffer(1, 1, 22050);
+        const src = ctx.createBufferSource();
+        src.buffer = buffer;
+        src.connect(ctx.destination);
+        src.start(0);
+        // allow it to be GC'd
+        src.onended = () => {
+          try { src.disconnect(); } catch (e) { }
+        };
+      }
+    } catch (e) {
+      // ignore buffer-play errors
+    }
+  } catch (e) {
+    console.warn('Erro ao inicializar globalAudioContext:', e);
+  }
+
+  return globalAudioContext;
+};
+
 interface Props {
   onEnd: () => void;
   onUpsellRequired: (message: string) => void;
@@ -416,28 +460,25 @@ export function ActiveVoicePanel({ onEnd, onUpsellRequired, userId, sessionId, p
 
     const setupVoiceFeatures = async () => {
       try {
-        // ── 1. MOVER AudioContext AQUI — ANTES de qualquer await ──
-        const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
-        const audioContext = new AudioContextClass();
-        audioContextRef.current = audioContext;
-
-        // ── 2. Criar função de unlock de áudio (técnica padrão iOS) ──
-        const unlockAudio = async () => {
+        // Recuperar AudioContext singleton inicializado pelo componente pai
+        let audioContext = globalAudioContext as AudioContext | null;
+        if (!audioContext) {
+          console.warn('globalAudioContext não inicializado — criando fallback local');
+          const AudioContextClass = (window as any).AudioContext || (window as any).webkitAudioContext;
           try {
-            if (audioContext.state === 'suspended') {
-              await audioContext.resume();
-              console.log('✅ AudioContext desbloqueado via User Gesture (iOS/Mobile)');
-            }
+            const fallback = new AudioContextClass();
+            // assign both global and local references
+            globalAudioContext = fallback;
+            audioContext = fallback;
+            audioContextRef.current = fallback;
           } catch (e) {
-            console.warn('⚠️ Falha ao desbloquear AudioContext:', e);
+            console.error('Falha ao criar AudioContext fallback:', e);
           }
-        };
+        } else {
+          audioContextRef.current = audioContext;
+        }
 
-        // ── 3. Registrar event listeners para ativar unlock ──
-        document.addEventListener('touchstart', unlockAudio, { once: true });
-        document.addEventListener('click', unlockAudio, { once: true });
-
-        // ── 4. Obter stream do microfone (APÓS AudioContext estar pronto) ──
+        // Obter stream do microfone (após ter o AudioContext apontado)
         const stream = await navigator.mediaDevices.getUserMedia({
           audio: {
             echoCancellation: true,
@@ -448,6 +489,9 @@ export function ActiveVoicePanel({ onEnd, onUpsellRequired, userId, sessionId, p
         micStreamRef.current = stream;
 
         // ── 6. Criar source do microfone no AudioContext ──
+        if (!audioContext) {
+          throw new Error('AudioContext não disponível para criar MediaStreamSource');
+        }
         micSource = audioContext.createMediaStreamSource(stream);
 
         // ── 7. Criar MediaStreamDestination (O MIXER) ──
@@ -617,11 +661,9 @@ export function ActiveVoicePanel({ onEnd, onUpsellRequired, userId, sessionId, p
       // 5. Desconectar nós de áudio
       try { micSource?.disconnect(); } catch (e) { }
 
-      // 6. Fechar AudioContext (libera todos os recursos)
-      if (audioContextRef.current && audioContextRef.current.state !== 'closed') {
-        audioContextRef.current.close();
-      }
-      audioContextRef.current = null;
+      // 6. Não fechar o AudioContext global — apenas desconectar nós e limpar mixer
+      // (o `globalAudioContext` é gerenciado pelo escopo global e não deve ser fechado aqui)
+      try { /* audioContextRef.current may point to globalAudioContext; do not close */ } catch (e) { }
       mixerDestinationRef.current = null;
 
       // 7. Parar todas as tracks do microfone

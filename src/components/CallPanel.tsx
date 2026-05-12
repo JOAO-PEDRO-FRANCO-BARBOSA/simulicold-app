@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { Phone, Sparkles, MessageSquare, Mic, PhoneOff } from 'lucide-react';
 import { EndCallModal } from './EndCallModal';
+import { initGlobalAudio } from './ActiveVoicePanel';
 
 export function CallPanel() {
   const [callState, setCallState] = useState<'idle' | 'active' | 'ended'>('idle');
@@ -56,7 +57,7 @@ export function CallPanel() {
             <p className="text-foreground/60 mb-8">Clique no botão para simular a ligação</p>
 
             <button 
-              onClick={() => setCallState('active')}
+              onClick={() => { initGlobalAudio(); setCallState('active'); }}
               className="flex items-center gap-3 bg-primary hover:bg-primary-hover text-white px-8 py-4 rounded-full font-bold text-lg transition-transform hover:scale-105 active:scale-95 shadow-[0_0_20px_rgba(219,39,119,0.3)] cursor-pointer"
             >
               <Phone className="w-6 h-6" />
