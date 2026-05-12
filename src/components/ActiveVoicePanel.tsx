@@ -416,7 +416,28 @@ export function ActiveVoicePanel({ onEnd, onUpsellRequired, userId, sessionId, p
 
     const setupVoiceFeatures = async () => {
       try {
-        // ── 1. Obter stream do microfone ──
+        // ── 1. MOVER AudioContext AQUI — ANTES de qualquer await ──
+        const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+        const audioContext = new AudioContextClass();
+        audioContextRef.current = audioContext;
+
+        // ── 2. Criar função de unlock de áudio (técnica padrão iOS) ──
+        const unlockAudio = async () => {
+          try {
+            if (audioContext.state === 'suspended') {
+              await audioContext.resume();
+              console.log('✅ AudioContext desbloqueado via User Gesture (iOS/Mobile)');
+            }
+          } catch (e) {
+            console.warn('⚠️ Falha ao desbloquear AudioContext:', e);
+          }
+        };
+
+        // ── 3. Registrar event listeners para ativar unlock ──
+        document.addEventListener('touchstart', unlockAudio, { once: true });
+        document.addEventListener('click', unlockAudio, { once: true });
+
+        // ── 4. Obter stream do microfone (APÓS AudioContext estar pronto) ──
         const stream = await navigator.mediaDevices.getUserMedia({
           audio: {
             echoCancellation: true,
@@ -426,31 +447,21 @@ export function ActiveVoicePanel({ onEnd, onUpsellRequired, userId, sessionId, p
         });
         micStreamRef.current = stream;
 
-        // ── 2. Criar AudioContext compartilhado ──
-        const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
-        const audioContext = new AudioContextClass();
-        audioContextRef.current = audioContext;
+        // ── 6. Criar source do microfone no AudioContext ──
+        micSource = audioContext.createMediaStreamSource(stream);
 
-        // Garantir que o AudioContext está ativo (Chrome requer user gesture)
-        if (audioContext.state === 'suspended') {
-          await audioContext.resume();
-        }
-
-        // ── 3. Criar MediaStreamDestination (O MIXER) ──
+        // ── 7. Criar MediaStreamDestination (O MIXER) ──
         // Tudo que for conectado aqui será gravado pelo MediaRecorder
         const mixerDestination = audioContext.createMediaStreamDestination();
         mixerDestinationRef.current = mixerDestination;
 
-        // ── 4. Criar source do microfone no AudioContext ──
-        micSource = audioContext.createMediaStreamSource(stream);
-
-        // ── 5. Criar analyser para visualização das ondas ──
+        // ── 8. Criar analyser para visualização das ondas ──
         analyser = audioContext.createAnalyser();
         analyser.fftSize = 256;
         analyser.minDecibels = -85;
         analyser.smoothingTimeConstant = 0.3;
 
-        // ── 6. CONEXÕES CRÍTICAS ──
+        // ── 9. CONEXÕES CRÍTICAS ──
         //
         // Mic → Analyser (APENAS visualização, analyser não produz som)
         micSource.connect(analyser);
@@ -462,7 +473,7 @@ export function ActiveVoicePanel({ onEnd, onUpsellRequired, userId, sessionId, p
         // O usuário NÃO deve ouvir a própria voz nos fones.
         // A voz do mic vai APENAS para o gravador.
 
-        // ── 7. Animação do visualizador de ondas ──
+        // ── 10. Animação do visualizador de ondas ──
         const dataArray = new Uint8Array(analyser.frequencyBinCount);
 
         const updateWaves = () => {
@@ -491,7 +502,7 @@ export function ActiveVoicePanel({ onEnd, onUpsellRequired, userId, sessionId, p
 
         updateWaves();
 
-        // ── 8. Iniciar MediaRecorder NO MIXER ──
+        // ── 11. Iniciar MediaRecorder NO MIXER ──
         // IMPORTANTE: grava do mixerDestination.stream (mic + IA juntos)
         // e NÃO do stream raw do microfone!
         try {
@@ -517,7 +528,7 @@ export function ActiveVoicePanel({ onEnd, onUpsellRequired, userId, sessionId, p
           console.warn('⚠️ MediaRecorder não disponível, gravação desabilitada:', recErr);
         }
 
-        // ── 9. Inicializar Web Speech API — Reconhecimento de Voz (STT) ──
+        // ── 12. Inicializar Web Speech API — Reconhecimento de Voz (STT) ──
         const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
         if (SpeechRecognition) {
           const recognition = new SpeechRecognition();
