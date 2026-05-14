@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { Mic, PhoneOff, Loader2 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
+import { getGlobalAudioContext } from '@/lib/audioUtils';
 
 export const audioLogs: string[] = [];
 export const addAudioLog = (msg: string) => {
@@ -468,22 +469,14 @@ export function ActiveVoicePanel({ onEnd, onUpsellRequired, userId, sessionId, p
 
     const setupVoiceFeatures = async () => {
       try {
-        // Recuperar AudioContext singleton inicializado pelo componente pai
-        let audioContext = globalAudioContext as AudioContext | null;
+        // Usar Singleton de AudioContext
+        const audioContext = getGlobalAudioContext();
         if (!audioContext) {
-          console.warn('globalAudioContext não inicializado — criando fallback local');
-          const AudioContextClass = (window as any).AudioContext || (window as any).webkitAudioContext;
-          try {
-            const fallback = new AudioContextClass();
-            // assign both global and local references
-            globalAudioContext = fallback;
-            audioContext = fallback;
-            audioContextRef.current = fallback;
-          } catch (e) {
-            console.error('Falha ao criar AudioContext fallback:', e);
-          }
-        } else {
-          audioContextRef.current = audioContext;
+          throw new Error('AudioContext não disponível');
+        }
+        audioContextRef.current = audioContext;
+        if (audioContext.state === 'suspended') {
+          await audioContext.resume();
         }
 
         // Obter stream do microfone (após ter o AudioContext apontado)

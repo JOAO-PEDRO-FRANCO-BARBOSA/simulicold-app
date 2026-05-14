@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { Phone, Sparkles, MessageSquare, Mic, PhoneOff } from 'lucide-react';
 import { EndCallModal } from './EndCallModal';
-import { initGlobalAudio, addAudioLog } from './ActiveVoicePanel';
+import { unlockAudioContext } from '@/lib/audioUtils';
 
 export function CallPanel() {
   const [callState, setCallState] = useState<'idle' | 'active' | 'ended'>('idle');
@@ -35,9 +35,9 @@ export function CallPanel() {
   };
 
   return (
-    <div className="flex flex-col h-full gap-4">
+    <div className="flex flex-col h-full gap-4 overflow-y-auto overflow-x-hidden">
       {/* Container Principal */}
-      <div className="flex-1 rounded-2xl border border-border bg-panel flex flex-col relative transition-all duration-300">
+      <div className="flex-1 rounded-2xl border border-border bg-panel flex flex-col relative transition-all duration-300 overflow-y-auto overflow-x-hidden">
         
         {/* Cabeçalho da Seção */}
         <div className="p-4 border-b border-border flex items-center gap-2">
@@ -47,7 +47,7 @@ export function CallPanel() {
 
         {/* ================= ESTADO: IDLE (Aguardando) ================= */}
         {callState === 'idle' && (
-          <div className="flex-1 flex flex-col items-center justify-center p-8 relative overflow-hidden animate-in fade-in duration-300">
+          <div className="flex-1 flex flex-col items-center justify-center p-4 sm:p-8 relative overflow-hidden animate-in fade-in duration-300">
             <Sparkles className="absolute bottom-8 right-8 w-12 h-12 text-foreground/5" />
             
             <div className="w-24 h-24 bg-background rounded-full border border-border flex items-center justify-center mb-6 shadow-xl">
@@ -57,18 +57,9 @@ export function CallPanel() {
             <p className="text-foreground/60 mb-8">Clique no botão para simular a ligação</p>
 
             <button 
-              onClick={async () => {
-                alert('1. CLICK REGISTRADO!');
-                try {
-                  const ctx = initGlobalAudio();
-                  alert('2. CTX CRIADO: ' + ctx.state);
-                  await navigator.mediaDevices.getUserMedia({ audio: true });
-                  alert('3. MIC LIBERADO!');
-                  if (ctx.state === 'suspended') { await ctx.resume(); }
-                  setCallState('active');
-                } catch (err: any) {
-                  alert('ERRO NO CLICK: ' + err.message);
-                }
+              onClick={() => {
+                unlockAudioContext();
+                setCallState('active');
               }}
               className="flex items-center gap-3 bg-primary hover:bg-primary-hover text-white px-8 py-4 rounded-full font-bold text-lg transition-transform hover:scale-105 active:scale-95 shadow-[0_0_20px_rgba(219,39,119,0.3)] cursor-pointer"
             >
@@ -80,7 +71,7 @@ export function CallPanel() {
 
         {/* ================= ESTADO: ACTIVE (Ativo/Ouvindo) ================= */}
         {callState === 'active' && (
-          <div className="flex-1 flex flex-col items-center justify-center p-8 relative overflow-hidden animate-in fade-in zoom-in-95 duration-500">
+          <div className="flex-1 flex flex-col items-center justify-center p-4 sm:p-8 relative overflow-hidden animate-in fade-in zoom-in-95 duration-500">
             
             {/* Componente Cronômetro Decorativo Superior */}
             <div className="absolute top-8 left-1/2 -translate-x-1/2 flex items-center gap-2 bg-background border border-border px-5 py-2 rounded-full shadow-lg">
@@ -91,12 +82,12 @@ export function CallPanel() {
             {/* Ícone Pulsante de Voz (Dourado/Amarelo do Design) */}
             <div className="relative mb-8 mt-6">
               <div className="absolute inset-0 bg-accent/20 rounded-full animate-ping" style={{ animationDuration: '3s' }} />
-              <div className="relative w-32 h-32 bg-background rounded-full border border-accent/50 flex items-center justify-center shadow-[0_0_50px_rgba(234,179,8,0.15)] overflow-hidden">
+              <div className="relative w-32 h-32 sm:w-44 sm:h-44 bg-background rounded-full border border-accent/50 flex items-center justify-center shadow-[0_0_50px_rgba(234,179,8,0.15)] overflow-hidden">
                 <Mic className="w-12 h-12 text-accent" />
               </div>
             </div>
 
-            <h3 className="text-xl font-bold mb-2 tracking-wide font-sans">Sua vez de falar</h3>
+            <h3 className="text-xl sm:text-3xl font-bold mb-2 tracking-wide font-sans">Sua vez de falar</h3>
             <p className="text-foreground/40 text-sm mb-12">Fale naturalmente...</p>
             
             {/* Visualizador de Ondas Progressivo Abstrato */}
@@ -121,7 +112,7 @@ export function CallPanel() {
       </div>
 
       {/* Caixa Inferior Ficha Limpa */}
-      <div className="p-6 rounded-2xl border border-border bg-panel text-sm shrink-0">
+      <div className="p-4 sm:p-6 rounded-2xl border border-border bg-panel text-sm shrink-0 overflow-y-auto max-h-[200px] sm:max-h-none">
         <div className="flex items-center gap-2 mb-4">
           <Sparkles className="w-5 h-5 text-accent" />
           <h3 className="text-md font-bold text-accent">Dicas do Coach (B2B)</h3>
