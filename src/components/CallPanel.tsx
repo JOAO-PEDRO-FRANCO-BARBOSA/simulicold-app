@@ -58,28 +58,16 @@ export function CallPanel() {
 
             <button 
               onClick={async () => {
+                alert('1. CLICK REGISTRADO!');
                 try {
-                  addAudioLog('1. Botão clicado. Iniciando...');
-
-                  // 1. Síncrono: Obtém o token de User Gesture destravando o áudio imediatamente
                   const ctx = initGlobalAudio();
-                  addAudioLog('2. Ctx gerado. State: ' + ctx.state);
-
-                  // 2. Assíncrono: Pede o mic. Aqui o OS mobile vai causar um "hardware interrupt" e suspender o ctx
-                  addAudioLog('3. Pedindo getUserMedia...');
+                  alert('2. CTX CRIADO: ' + ctx.state);
                   await navigator.mediaDevices.getUserMedia({ audio: true });
-                  addAudioLog('4. Mic OK! Hardware alterado.');
-
-                  // 3. Resgate: Como o ctx já foi validado pelo gesture no passo 1, podemos acordá-lo aqui
-                  if (ctx && ctx.state === 'suspended') {
-                    await ctx.resume();
-                  }
-                  addAudioLog('5. Resume executado. Final State: ' + ctx.state);
-
+                  alert('3. MIC LIBERADO!');
+                  if (ctx.state === 'suspended') { await ctx.resume(); }
                   setCallState('active');
                 } catch (err: any) {
-                  addAudioLog('ERRO MIC: ' + err.message);
-                  alert('Permita o microfone para continuar.');
+                  alert('ERRO NO CLICK: ' + err.message);
                 }
               }}
               className="flex items-center gap-3 bg-primary hover:bg-primary-hover text-white px-8 py-4 rounded-full font-bold text-lg transition-transform hover:scale-105 active:scale-95 shadow-[0_0_20px_rgba(219,39,119,0.3)] cursor-pointer"
