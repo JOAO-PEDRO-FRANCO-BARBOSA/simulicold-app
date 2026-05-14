@@ -4,6 +4,15 @@ import { useState, useEffect, useRef } from 'react';
 import { Mic, PhoneOff, Loader2 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 
+export const audioLogs: string[] = [];
+export const addAudioLog = (msg: string) => {
+  const time = new Date().toLocaleTimeString();
+  const log = `[${time}] ${msg}`;
+  audioLogs.push(log);
+  console.log(log);
+  if (typeof window !== 'undefined') window.dispatchEvent(new Event('audioLogUpdated'));
+};
+
 // Global singleton AudioContext and initializer to be triggered synchronously
 export let globalAudioContext: AudioContext | null = null;
 export const initGlobalAudio = () => {
@@ -41,6 +50,7 @@ export function ActiveVoicePanel({ onEnd, onUpsellRequired, userId, sessionId, p
   const [timeLeft, setTimeLeft] = useState(300);
   const [waveHeights, setWaveHeights] = useState([6, 6, 6, 6, 6]);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [logs, setLogs] = useState<string[]>([]);
 
   // === Refs de controle de estado ===
   const recognitionRef = useRef<any>(null);
@@ -159,6 +169,18 @@ export function ActiveVoicePanel({ onEnd, onUpsellRequired, userId, sessionId, p
     messagesRef.current = messages;
   }, [messages]);
 
+  useEffect(() => {
+    const handleAudioLogUpdated = () => {
+      setLogs([...audioLogs.slice(-8)]);
+    };
+
+    handleAudioLogUpdated();
+    window.addEventListener('audioLogUpdated', handleAudioLogUpdated);
+    return () => {
+      window.removeEventListener('audioLogUpdated', handleAudioLogUpdated);
+    };
+  }, []);
+
   const formatTime = (seconds: number) => {
     const m = Math.floor(seconds / 60);
     const s = seconds % 60;
@@ -211,6 +233,7 @@ export function ActiveVoicePanel({ onEnd, onUpsellRequired, userId, sessionId, p
     setIsProcessing(false);
 
     try {
+      addAudioLog('TTS: Fetch da ElevenLabs...');
       // 1. Buscar áudio via nossa rota /api/tts
       const ttsResponse = await fetch('/api/tts', {
         method: 'POST',
@@ -236,6 +259,7 @@ export function ActiveVoicePanel({ onEnd, onUpsellRequired, userId, sessionId, p
 
       // Obter o áudio como ArrayBuffer
       const audioArrayBuffer = await ttsResponse.arrayBuffer();
+  addAudioLog('TTS: ArrayBuffer recebido.');
 
       // Verificar se a sessão ainda está ativa após o fetch
       if (!isActiveRef.current || !audioContextRef.current) {
@@ -253,6 +277,7 @@ export function ActiveVoicePanel({ onEnd, onUpsellRequired, userId, sessionId, p
       }
 
       // 2. Decodificar MP3 → AudioBuffer
+      addAudioLog('TTS: Decoding... Ctx state = ' + audioContext.state);
       const audioBuffer = await audioContext.decodeAudioData(audioArrayBuffer);
 
       // 3. Criar AudioBufferSourceNode (one-shot: cada instância toca uma vez)
@@ -290,9 +315,11 @@ export function ActiveVoicePanel({ onEnd, onUpsellRequired, userId, sessionId, p
       };
 
       // 6. REPRODUZIR!
+      addAudioLog('TTS: Source start(0)!');
       sourceNode.start(0);
 
     } catch (err: any) {
+      addAudioLog('ERRO TTS: ' + err.message);
       if (isSimulationErrorStatus(err?.status, err?.message)) {
         handleSimulationExhausted('Simulações esgotadas');
         return;
@@ -808,6 +835,12 @@ export function ActiveVoicePanel({ onEnd, onUpsellRequired, userId, sessionId, p
   // ===================================================================
   return (
     <div className="flex-1 flex flex-col items-center justify-center p-8 relative rounded-[2rem] border border-border bg-panel overflow-hidden animate-in fade-in duration-500 shadow-sm h-full">
+
+      <div className="fixed top-2 left-2 right-2 z-50 bg-black/70 text-green-400 text-xs rounded-md p-2 max-h-40 overflow-auto pointer-events-none">
+        {logs.map((log, index) => (
+          <div key={index}>{log}</div>
+        ))}
+      </div>
 
       {/* Overlay de carregamento */}
       {isProcessing && (

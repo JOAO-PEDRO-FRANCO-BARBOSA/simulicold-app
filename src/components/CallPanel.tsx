@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { Phone, Sparkles, MessageSquare, Mic, PhoneOff } from 'lucide-react';
 import { EndCallModal } from './EndCallModal';
-import { initGlobalAudio } from './ActiveVoicePanel';
+import { initGlobalAudio, addAudioLog } from './ActiveVoicePanel';
 
 export function CallPanel() {
   const [callState, setCallState] = useState<'idle' | 'active' | 'ended'>('idle');
@@ -59,19 +59,26 @@ export function CallPanel() {
             <button 
               onClick={async () => {
                 try {
+                  addAudioLog('1. Botão clicado. Iniciando...');
+
                   // 1. Síncrono: Obtém o token de User Gesture destravando o áudio imediatamente
                   const ctx = initGlobalAudio();
+                  addAudioLog('2. Ctx gerado. State: ' + ctx.state);
 
                   // 2. Assíncrono: Pede o mic. Aqui o OS mobile vai causar um "hardware interrupt" e suspender o ctx
+                  addAudioLog('3. Pedindo getUserMedia...');
                   await navigator.mediaDevices.getUserMedia({ audio: true });
+                  addAudioLog('4. Mic OK! Hardware alterado.');
 
                   // 3. Resgate: Como o ctx já foi validado pelo gesture no passo 1, podemos acordá-lo aqui
                   if (ctx && ctx.state === 'suspended') {
                     await ctx.resume();
                   }
+                  addAudioLog('5. Resume executado. Final State: ' + ctx.state);
 
                   setCallState('active');
-                } catch (err) {
+                } catch (err: any) {
+                  addAudioLog('ERRO MIC: ' + err.message);
                   alert('Permita o microfone para continuar.');
                 }
               }}
