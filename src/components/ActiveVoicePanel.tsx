@@ -14,28 +14,6 @@ export const addAudioLog = (msg: string) => {
   if (typeof window !== 'undefined') window.dispatchEvent(new Event('audioLogUpdated'));
 };
 
-// Global singleton AudioContext and initializer to be triggered synchronously
-export let globalAudioContext: AudioContext | null = null;
-export const initGlobalAudio = () => {
-  if (!globalAudioContext) {
-    const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
-    globalAudioContext = new AudioCtx();
-    const forceWake = () => {
-      if (globalAudioContext && globalAudioContext.state === 'suspended') globalAudioContext.resume();
-    };
-    document.addEventListener('touchstart', forceWake, { passive: true });
-    document.addEventListener('click', forceWake, { passive: true });
-  }
-
-  if (globalAudioContext.state === 'suspended') globalAudioContext.resume();
-  const buffer = globalAudioContext.createBuffer(1, 1, 22050);
-  const source = globalAudioContext.createBufferSource();
-  source.buffer = buffer;
-  source.connect(globalAudioContext.destination);
-  source.start();
-  return globalAudioContext;
-};
-
 interface Props {
   onEnd: () => void;
   onUpsellRequired: (message: string) => void;
@@ -488,6 +466,26 @@ export function ActiveVoicePanel({ onEnd, onUpsellRequired, userId, sessionId, p
           }
         });
         micStreamRef.current = stream;
+
+        // --- INICIO DO RESGATE IOS ---
+        // O getUserMedia acabou de alterar o hardware do iPhone e suspendeu nosso contexto.
+        // Precisamos acorda-lo forcosamente agora que temos o controle da placa de som.
+        if (audioContext.state === 'suspended') {
+          try {
+            await audioContext.resume();
+            addAudioLog('Ctx acordado apos o microfone!');
+          } catch (e: any) {
+            console.error('Falha ao acordar contexto pos-mic', e);
+          }
+        }
+
+        // Injetar um cao de guarda para acordar o audio caso o iOS tente suspende-lo novamente no meio da chamada
+        audioContext.onstatechange = () => {
+          if (audioContext.state === 'suspended' && isActiveRef.current) {
+            audioContext.resume().catch(() => {});
+          }
+        };
+        // --- FIM DO RESGATE IOS ---
 
         // ── 6. Criar source do microfone no AudioContext ──
         if (!audioContext) {
