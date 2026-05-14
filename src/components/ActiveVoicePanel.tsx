@@ -8,43 +8,21 @@ import { supabase } from '@/lib/supabase';
 export let globalAudioContext: AudioContext | null = null;
 export const initGlobalAudio = () => {
   if (!globalAudioContext) {
-    const AudioCtx = (window as any).AudioContext || (window as any).webkitAudioContext;
-    try {
-      globalAudioContext = new AudioCtx();
-    } catch (e) {
-      console.warn('Não foi possível criar AudioContext global:', e);
-      globalAudioContext = null;
-      return null;
-    }
+    const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+    globalAudioContext = new AudioCtx();
+    const forceWake = () => {
+      if (globalAudioContext && globalAudioContext.state === 'suspended') globalAudioContext.resume();
+    };
+    document.addEventListener('touchstart', forceWake, { passive: true });
+    document.addEventListener('click', forceWake, { passive: true });
   }
 
-  try {
-    const ctx = globalAudioContext;
-    if (ctx && ctx.state === 'suspended') {
-      // Not awaiting here so this runs synchronously inside click handler call stack
-      void ctx.resume();
-    }
-
-    // Play a tiny silent buffer to force unlock on iOS if needed
-    try {
-      if (ctx) {
-        const buffer = ctx.createBuffer(1, 1, 22050);
-        const src = ctx.createBufferSource();
-        src.buffer = buffer;
-        src.connect(ctx.destination);
-        src.start(0);
-        // allow it to be GC'd
-        src.onended = () => {
-          try { src.disconnect(); } catch (e) { }
-        };
-      }
-    } catch (e) {
-      // ignore buffer-play errors
-    }
-  } catch (e) {
-    console.warn('Erro ao inicializar globalAudioContext:', e);
-  }
-
+  if (globalAudioContext.state === 'suspended') globalAudioContext.resume();
+  const buffer = globalAudioContext.createBuffer(1, 1, 22050);
+  const source = globalAudioContext.createBufferSource();
+  source.buffer = buffer;
+  source.connect(globalAudioContext.destination);
+  source.start();
   return globalAudioContext;
 };
 

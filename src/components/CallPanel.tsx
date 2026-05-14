@@ -59,16 +59,20 @@ export function CallPanel() {
             <button 
               onClick={async () => {
                 try {
-                  // 1. Request microphone FIRST to force OS into PlayAndRecord mode
+                  // 1. Síncrono: Obtém o token de User Gesture destravando o áudio imediatamente
+                  const ctx = initGlobalAudio();
+
+                  // 2. Assíncrono: Pede o mic. Aqui o OS mobile vai causar um "hardware interrupt" e suspender o ctx
                   await navigator.mediaDevices.getUserMedia({ audio: true });
-                  
-                  // 2. THEN initialize and unlock global AudioContext (now born in correct hardware state)
-                  initGlobalAudio();
-                  
-                  // 3. Render active panel
+
+                  // 3. Resgate: Como o ctx já foi validado pelo gesture no passo 1, podemos acordá-lo aqui
+                  if (ctx && ctx.state === 'suspended') {
+                    await ctx.resume();
+                  }
+
                   setCallState('active');
                 } catch (err) {
-                  alert('Permita o acesso ao microfone para simular a chamada.');
+                  alert('Permita o microfone para continuar.');
                 }
               }}
               className="flex items-center gap-3 bg-primary hover:bg-primary-hover text-white px-8 py-4 rounded-full font-bold text-lg transition-transform hover:scale-105 active:scale-95 shadow-[0_0_20px_rgba(219,39,119,0.3)] cursor-pointer"
