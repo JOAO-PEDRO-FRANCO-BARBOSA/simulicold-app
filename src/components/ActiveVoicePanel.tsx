@@ -35,6 +35,22 @@ export const initGlobalAudio = () => {
   return globalAudioContext;
 };
 
+// Vanilla JS Force Logger — Injeta HUD diretamente no DOM
+export const forceLog = (msg: string) => {
+  if (typeof window === 'undefined') return;
+  let hud = document.getElementById('vanilla-debug-hud');
+  if (!hud) {
+    hud = document.createElement('div');
+    hud.id = 'vanilla-debug-hud';
+    hud.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:350px;background:rgba(0,0,0,0.85);color:#0f0;z-index:999999;overflow-y:auto;font-family:monospace;font-size:11px;padding:12px;pointer-events:none;line-height:1.4;';
+    document.body.appendChild(hud);
+  }
+  const time = new Date().toLocaleTimeString();
+  hud.innerHTML += `<div>[${time}] ${msg}</div>`;
+  hud.scrollTop = hud.scrollHeight;
+  console.log(msg);
+};
+
 interface Props {
   onEnd: () => void;
   onUpsellRequired: (message: string) => void;
